@@ -3,12 +3,16 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flow/app_open_ad_manager.dart';
 import 'screens/home_page.dart';
 import 'package:flow/screens/permission_screen.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
-void main() {
+void main() async {
   // Ensure that the Flutter binding is initialized before running the app.
   WidgetsFlutterBinding.ensureInitialized();
 
-  
+  final appDocumentDir = await getApplicationDocumentsDirectory();
+  Hive.init(appDocumentDir.path);
+  await Hive.openBox('blockerState'); // Open a box for blocker state
 
   MobileAds.instance.initialize();
   runApp(const AppBlocker());

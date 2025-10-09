@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // Added import for kDebugMode
 import 'package:google_fonts/google_fonts.dart';
 import 'package:numberpicker/numberpicker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // Added import
+import 'package:hive_flutter/hive_flutter.dart'; // Added import for Hive
 import '../native_blocker.dart';
 
 class HomePage extends StatefulWidget {
@@ -50,6 +51,7 @@ class _HomePageState extends State<HomePage> {
     _loadData();
     _loadBannerAd(); // Load banner ad
     _loadRewardedAd(); // Load rewarded ad
+    _loadBlockingState(); // Load persisted blocking state
   }
 
   @override
@@ -107,22 +109,23 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final prefs = await SharedPreferences.getInstance();
     final allApps = await DeviceApps.getInstalledApplications(
         includeAppIcons: true, includeSystemApps: true, onlyAppsWithLaunchIntent: true);
 
     final foundApps = allApps.where((app) => _targetPackageNames.contains(app.packageName)).toList();
 
+    final blockerBox = Hive.box('blockerState');
+    final savedBlockedApps = blockerBox.get('selected_blocked_apps');
+
     setState(() {
       _distractiveApps = foundApps;
-      _selectedBlockedApps = prefs.getStringList('selected_blocked_apps')?.toSet() ?? {};
+      _selectedBlockedApps = (savedBlockedApps as List?)?.cast<String>().toSet() ?? {};
       _isLoading = false;
     });
   }
 
   // --- App Selection Logic ---
   Future<void> _toggleAppSelection(String packageName, bool isSelected) async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
       if (isSelected) {
         _selectedBlockedApps.add(packageName);
@@ -130,7 +133,8 @@ class _HomePageState extends State<HomePage> {
         _selectedBlockedApps.remove(packageName);
       }
     });
-    await prefs.setStringList('selected_blocked_apps', _selectedBlockedApps.toList());
+    final blockerBox = Hive.box('blockerState');
+    await blockerBox.put('selected_blocked_apps', _selectedBlockedApps.toList());
   }
 
   // --- Blocker Activation & Timer Logic ---
@@ -164,15 +168,11 @@ class _HomePageState extends State<HomePage> {
       _isBlockingActive = true;
     });
 
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_countdownDuration.inSeconds <= 0) {
-        _stopBlocking();
-      } else {
-        setState(() {
-          _countdownDuration = _countdownDuration - const Duration(seconds: 1);
-        });
-      }
-    });
+    final blockerBox = Hive.box('blockerState');
+    await blockerBox.put('is_blocking_active', true);
+    await blockerBox.put('blocker_end_time_millis', DateTime.now().add(duration).millisecondsSinceEpoch);
+
+    _startCountdownTimer(); // This function will be re-added later
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Blocker activated!'), backgroundColor: Colors.green));
@@ -187,8 +187,67 @@ class _HomePageState extends State<HomePage> {
       _countdownDuration = Duration.zero;
       _isBlockingActive = false;
     });
+
+    final blockerBox = Hive.box('blockerState');
+    blockerBox.delete('is_blocking_active');
+    blockerBox.delete('blocker_end_time_millis');
+
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Blocker deactivated.'), backgroundColor: Colors.red));
+  }
+
+  void _startCountdownTimer() {
+    if (kDebugMode) {
+      print('[_startCountdownTimer] Timer started with duration: $_countdownDuration');
+    }
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdownDuration.inSeconds <= 0) {
+        _stopBlocking();
+      } else {
+        setState(() {
+          _countdownDuration = _countdownDuration - const Duration(seconds: 1);
+        });
+      }
+    });
+  }
+
+  Future<void> _loadBlockingState() async {
+    final blockerBox = Hive.box('blockerState');
+    final savedIsBlockingActive = blockerBox.get('is_blocking_active') ?? false;
+    final savedEndTimeMillis = blockerBox.get('blocker_end_time_millis');
+
+    if (kDebugMode) {
+      print('[_loadBlockingState] savedIsBlockingActive: $savedIsBlockingActive');
+      print('[_loadBlockingState] savedEndTimeMillis: $savedEndTimeMillis');
+    }
+
+    if (savedIsBlockingActive && savedEndTimeMillis != null) {
+      final savedEndTime = DateTime.fromMillisecondsSinceEpoch(savedEndTimeMillis);
+      final remainingDuration = savedEndTime.difference(DateTime.now());
+
+      if (kDebugMode) {
+        print('[_loadBlockingState] savedEndTime: $savedEndTime');
+        print('[_loadBlockingState] remainingDuration: $remainingDuration');
+      }
+
+      if (remainingDuration.isNegative) {
+        // Blocker expired while app was closed
+        if (kDebugMode) {
+          print('[_loadBlockingState] Blocker expired, stopping.');
+        }
+        _stopBlocking();
+      } else {
+        setState(() {
+          _countdownDuration = remainingDuration;
+          _isBlockingActive = true;
+        });
+        if (kDebugMode) {
+          print('[_loadBlockingState] Resuming blocker with duration: $_countdownDuration');
+        }
+        NativeBlocker.setBlockedApps(_selectedBlockedApps.toList()); // Re-activate native blocker
+        _startCountdownTimer(); // Start the timer with the loaded duration
+      }
+    }
   }
 
   // --- Permission Dialog ---
