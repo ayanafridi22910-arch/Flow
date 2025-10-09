@@ -305,6 +305,7 @@ class _HomePageState extends State<HomePage> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Failed to show ad. Blocker not activated.'), backgroundColor: Colors.red),
                         );
+                        _startBlocking(duration); // Activate blocker even if ad fails to show
                       },
                       onAdDismissedFullScreenContent: (ad) {
                         ad.dispose();
@@ -323,11 +324,9 @@ class _HomePageState extends State<HomePage> {
                       _startBlocking(duration); // Activate blocker only after reward
                     });
                   } else {
-                    // If ad is not loaded, show a message and try to load ad again.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ad not ready. Please try again.'), backgroundColor: Colors.orange),
-                    );
-                    _loadRewardedAd(); // Try to load ad again
+                    // If ad is not loaded, activate blocker immediately.
+                    _startBlocking(duration);
+                    _loadRewardedAd(); // Try to load ad again for next time
                   }
                 }
                 Navigator.of(context).pop();
