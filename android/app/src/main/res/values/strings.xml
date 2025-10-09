@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">This service is required to detect which app is currently in the foreground. This allows the app blocker to identify and block restricted apps in real-time. Your data is not collected or stored.</string>
+</resources>
