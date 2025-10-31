@@ -7,6 +7,7 @@ import 'package:numberpicker/numberpicker.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // Added import
 import 'package:hive_flutter/hive_flutter.dart'; // Added import for Hive
 import '../native_blocker.dart';
+import '../blocker_service.dart';
 
 class HomePage extends StatefulWidget {
   final Duration? initialDuration;
@@ -161,16 +162,19 @@ class _HomePageState extends State<HomePage> {
 
     // --- Permission Check ---
     final hasOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
+    final hasAccessibilityPerm = await NativeBlocker.isAccessibilityServiceEnabled();
     debugPrint("HomePage: Overlay permission granted: $hasOverlayPerm");
-    if (!hasOverlayPerm && mounted) {
+    debugPrint("HomePage: Accessibility permission granted: $hasAccessibilityPerm");
+    if ((!hasOverlayPerm || !hasAccessibilityPerm) && mounted) {
       await _showPermissionDialog();
       // After dialog, re-check if permission was granted
       final recheckOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
-      if (!recheckOverlayPerm) {
+      final recheckAccessibilityPerm = await NativeBlocker.isAccessibilityServiceEnabled();
+      if (!recheckOverlayPerm || !recheckAccessibilityPerm) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Overlay permission not granted. Blocker cannot activate.'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Overlay or Accessibility permission not granted. Blocker cannot activate.'), backgroundColor: Colors.red),
         );
-        debugPrint("HomePage: Overlay permission still not granted after request.");
+        debugPrint("HomePage: Permissions still not granted after request.");
         return;
       }
     }
@@ -183,8 +187,8 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    debugPrint("HomePage: Calling NativeBlocker.setBlockedApps with: $_selectedBlockedApps");
-    NativeBlocker.setBlockedApps(_selectedBlockedApps.toList());
+    debugPrint("HomePage: Calling BlockerService.updateNativeBlocker");
+    BlockerService.updateNativeBlocker();
     setState(() {
       _countdownDuration = duration;
       _isBlockingActive = true;
@@ -208,7 +212,7 @@ class _HomePageState extends State<HomePage> {
     if (!_isBlockingActive) return;
 
     _countdownTimer?.cancel();
-    NativeBlocker.setBlockedApps([]);
+    BlockerService.updateNativeBlocker();
     setState(() {
       _countdownDuration = Duration.zero;
       _isBlockingActive = false;

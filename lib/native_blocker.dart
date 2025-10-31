@@ -19,6 +19,17 @@ class NativeBlocker {
 
   // --- Permission Handling ---
 
+  static Future<bool> isAccessibilityServiceEnabled() async {
+    try {
+      final bool? isEnabled = await _channel.invokeMethod('checkAccessibilityServiceEnabled');
+      debugPrint("NativeBlocker: isAccessibilityServiceEnabled: ${isEnabled ?? false}");
+      return isEnabled ?? false;
+    } on PlatformException catch (e) {
+      debugPrint("NativeBlocker: Failed to check accessibility service: ${e.message}");
+      return false;
+    }
+  }
+
   // Checks if the overlay permission is granted.
   static Future<bool> isOverlayPermissionGranted() async {
     try {

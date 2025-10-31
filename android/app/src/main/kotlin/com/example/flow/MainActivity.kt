@@ -3,24 +3,29 @@ package com.example.flow
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle 
-import android.os.Handler 
+import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.text.TextUtils
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.content.ComponentName
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.view.accessibility.AccessibilityManager
+import androidx.annotation.NonNull // Yeh import add karein
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import com.example.flow.services.MyAccessibilityService
 
 class MainActivity: FlutterActivity() {
 
-    // YEH PURA HISSA SAME HAI
     companion object {
         private const val CHANNEL = "app.blocker/channel"
         private var channel: MethodChannel? = null
 
+        // Yeh function MyAccessibilityService se call hoga (agar URL tracking use kar rahe ho)
         fun sendUrlToFlutter(url: String) {
             Handler(Looper.getMainLooper()).post {
                 channel?.invokeMethod("onUrlVisited", url)
@@ -28,9 +33,16 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // YEH PURA HISSA BHI SAME HAI
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel("channel_id", "Flow Blocker", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+
+        // BlockManager.initialize(this) // Is line ki zaroorat nahi hai
 
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         
@@ -38,9 +50,7 @@ class MainActivity: FlutterActivity() {
             call, result ->
             when (call.method) {
                 "checkAccessibilityServiceEnabled" -> {
-                    // Hum yahan se updated function ko call karenge
                     val isEnabled = isAccessibilityServiceEnabled(this)
-                    Log.d("AccessibilityCheck", "Service enabled check returned: $isEnabled")
                     result.success(isEnabled)
                 }
 
@@ -66,6 +76,9 @@ class MainActivity: FlutterActivity() {
                 "setBlockedApps" -> {
                     val apps = call.argument<List<String>>("apps")
                     if (apps != null) {
+                        // Yahan MyAccessibilityService ko call karna hai
+                        MyAccessibilityService.updateBlockedApps(apps)
+                        Log.d("MainActivity", "Updated MyAccessibilityService with apps: $apps")
                         result.success(true)
                     } else {
                         result.error("INVALID_ARGUMENT", "App list cannot be null.", null)
@@ -79,28 +92,24 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // #################### SIRF IS FUNCTION ME BADLAV KIYA GAYA HAI ####################
     private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        try {
-            val settingValue = Settings.Secure.getString(
-                context.applicationContext.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            )
-            if (settingValue != null) {
-                Log.d("AccessibilityCheck", "System's enabled services list: '$settingValue'")
-                // A less strict check. This might be prone to false positives if another
-                // service has a similar name, but it's more robust against package name issues.
-                if (settingValue.contains(com.example.flow.services.AppDetectAccessibilityService::class.java.simpleName, ignoreCase = true)) {
-                    Log.d("AccessibilityCheck", "MATCH FOUND with simple name! Returning true.")
-                    return true
-                }
-            }
-        } catch (e: Settings.SettingNotFoundException) {
-            Log.e("AccessibilityCheck", "Setting not found", e)
-        }
+        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
         
-        Log.d("AccessibilityCheck", "No match found or accessibility is disabled. Returning false.")
+        // Yahan MyAccessibilityService ko check karna hai
+        val expectedComponentName = ComponentName(context, com.example.flow.services.MyAccessibilityService::class.java)
+
+        for (serviceInfo in enabledServices) {
+            val componentName = ComponentName(
+                serviceInfo.resolveInfo.serviceInfo.packageName,
+                serviceInfo.resolveInfo.serviceInfo.name
+            )
+            if (componentName == expectedComponentName) {
+                Log.d("AccessibilityCheck", "SUCCESS (Manager): Service is enabled and matches component name.")
+                return true
+            }
+        }
+        Log.d("AccessibilityCheck", "FAILURE (Manager): Service is NOT enabled. Looking for ${expectedComponentName.flattenToString()}")
         return false
     }
-    // #################################################################################
 }

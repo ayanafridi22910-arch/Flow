@@ -46,6 +46,7 @@ dependencies {
     // ####################################################################
 
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.0.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
 }
 
 flutter {

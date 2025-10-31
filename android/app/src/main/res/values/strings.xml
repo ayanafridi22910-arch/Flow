@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="accessibility_service_description">Flow needs this to track website URLs in Chrome for your productivity reports. This service does not read any other data.</string>
+    <string name="app_name">Flow App Blocker</string>
+    <string name="accessibility_service_description">Flow App Blocker needs this permission to detect which app is running, so it can be blocked according to your settings.</string>
 </resources>
