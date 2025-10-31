@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // Added import for kDebugMode
 import 'package:google_fonts/google_fonts.dart';
 import 'package:numberpicker/numberpicker.dart';
-
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // Added import
 import 'package:hive_flutter/hive_flutter.dart'; // Added import for Hive
 import '../native_blocker.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final Duration? initialDuration;
+  final bool isSelectionMode; // New parameter
+
+  const HomePage({super.key, this.initialDuration, this.isSelectionMode = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -52,6 +54,20 @@ class _HomePageState extends State<HomePage> {
     _loadBannerAd(); // Load banner ad
     _loadRewardedAd(); // Load rewarded ad
     _loadBlockingState(); // Load persisted blocking state
+
+    // If an initial duration is provided, start blocking immediately
+    if (widget.initialDuration != null && !_isBlockingActive) {
+      // We need to ensure apps are loaded before starting blocking
+      // This might require a slight delay or a different flow
+      // For now, we'll assume _loadData completes quickly enough
+      // or that _startBlocking handles the case where _selectedBlockedApps is empty
+      // (which it does by showing a SnackBar)
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && widget.initialDuration != null) {
+          _startBlocking(widget.initialDuration!); // Start blocking with the provided duration
+        }
+      });
+    }
   }
 
   @override
@@ -141,8 +157,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _startBlocking(Duration duration) async {
     if (_isBlockingActive) return;
 
+    debugPrint("HomePage: _startBlocking called.");
+
     // --- Permission Check ---
     final hasOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
+    debugPrint("HomePage: Overlay permission granted: $hasOverlayPerm");
     if (!hasOverlayPerm && mounted) {
       await _showPermissionDialog();
       // After dialog, re-check if permission was granted
@@ -151,6 +170,7 @@ class _HomePageState extends State<HomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Overlay permission not granted. Blocker cannot activate.'), backgroundColor: Colors.red),
         );
+        debugPrint("HomePage: Overlay permission still not granted after request.");
         return;
       }
     }
@@ -159,9 +179,11 @@ class _HomePageState extends State<HomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select apps to block first.'), backgroundColor: Colors.orange),
       );
+      debugPrint("HomePage: No apps selected for blocking.");
       return;
     }
 
+    debugPrint("HomePage: Calling NativeBlocker.setBlockedApps with: $_selectedBlockedApps");
     NativeBlocker.setBlockedApps(_selectedBlockedApps.toList());
     setState(() {
       _countdownDuration = duration;
@@ -171,12 +193,16 @@ class _HomePageState extends State<HomePage> {
     final blockerBox = Hive.box('blockerState');
     await blockerBox.put('is_blocking_active', true);
     await blockerBox.put('blocker_end_time_millis', DateTime.now().add(duration).millisecondsSinceEpoch);
+    await blockerBox.put('total_block_duration_seconds', duration.inSeconds); // Add this line
+    debugPrint("HomePage: Blocker state saved to Hive.");
 
-    _startCountdownTimer(); // This function will be re-added later
+    _startCountdownTimer();
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Blocker activated!'), backgroundColor: Colors.green));
+    debugPrint("HomePage: Blocker activated successfully.");
   }
+  
 
   void _stopBlocking() {
     if (!_isBlockingActive) return;
@@ -200,7 +226,11 @@ class _HomePageState extends State<HomePage> {
     if (kDebugMode) {
       print('[_startCountdownTimer] Timer started with duration: $_countdownDuration');
     }
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_countdownDuration.inSeconds <= 0) {
         _stopBlocking();
       } else {
@@ -244,7 +274,7 @@ class _HomePageState extends State<HomePage> {
         if (kDebugMode) {
           print('[_loadBlockingState] Resuming blocker with duration: $_countdownDuration');
         }
-        NativeBlocker.setBlockedApps(_selectedBlockedApps.toList()); // Re-activate native blocker
+
         _startCountdownTimer(); // Start the timer with the loaded duration
       }
     }
@@ -333,7 +363,7 @@ class _HomePageState extends State<HomePage> {
             ),
             TextButton(
               child: const Text('Set'),
-              onPressed: () {
+              onPressed: () async {
                 Duration duration = Duration.zero;
                 if (selectedHours > 0) {
                   duration += Duration(hours: selectedHours);
@@ -346,49 +376,9 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 if (duration.inSeconds > 0) {
-                  if (_isRewardedAdLoaded && _rewardedAd != null) {
-                    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
-                      onAdShowedFullScreenContent: (ad) {
-                        if (kDebugMode) {
-                          print('$ad onAdShowedFullScreenContent');
-                        }
-                      },
-                      onAdFailedToShowFullScreenContent: (ad, error) {
-                        ad.dispose();
-                        _rewardedAd = null;
-                        _isRewardedAdLoaded = false;
-                        _loadRewardedAd(); // Reload ad
-                        if (kDebugMode) {
-                          print('$ad onAdFailedToShowFullScreenContent: $error');
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Failed to show ad. Blocker not activated.'), backgroundColor: Colors.red),
-                        );
-                        _startBlocking(duration); // Activate blocker even if ad fails to show
-                      },
-                      onAdDismissedFullScreenContent: (ad) {
-                        ad.dispose();
-                        _rewardedAd = null;
-                        _isRewardedAdLoaded = false;
-                        _loadRewardedAd(); // Reload ad
-                        if (kDebugMode) {
-                          print('$ad onAdDismissedFullScreenContent');
-                        }
-                      },
-                    );
-                    _rewardedAd!.show(onUserEarnedReward: (ad, reward) {
-                      if (kDebugMode) {
-                        print('User earned reward: ${reward.amount} ${reward.type}');
-                      }
-                      _startBlocking(duration); // Activate blocker only after reward
-                    });
-                  } else {
-                    // If ad is not loaded, activate blocker immediately.
-                    _startBlocking(duration);
-                    _loadRewardedAd(); // Try to load ad again for next time
-                  }
+                  await _startBlocking(duration);
                 }
-                Navigator.of(context).pop();
+                if(context.mounted) Navigator.of(context).pop();
               },
             ),
           ],
@@ -397,6 +387,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  
+
+  // --- Time Setting Dialog ---
+ 
   // --- UI Build ---
   @override
   Widget build(BuildContext context) {
@@ -459,27 +453,40 @@ class _HomePageState extends State<HomePage> {
                 // Activate/Stop Blocker Button
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: _isBlockingActive
+                  child: widget.isSelectionMode
                       ? ElevatedButton.icon(
-                          onPressed: _stopBlocking,
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          label: const Text('Stop Blocker'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                            foregroundColor: Theme.of(context).colorScheme.onError,
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                        )
-                      : ElevatedButton.icon(
-                          onPressed: _showTimeSettingDialog,
-                          icon: const Icon(Icons.lock_open),
-                          label: const Text('Activate Blocker'),
+                          onPressed: () {
+                            Navigator.pop(context, {'selectedApps': _selectedBlockedApps.toList()});
+                          },
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: const Text('Select Apps'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Theme.of(context).colorScheme.primary,
                             foregroundColor: Theme.of(context).colorScheme.onPrimary,
                             minimumSize: const Size(double.infinity, 50),
                           ),
-                        ),
+                        )
+                      : _isBlockingActive
+                          ? ElevatedButton.icon(
+                              onPressed: _stopBlocking,
+                              icon: const Icon(Icons.stop_circle_outlined),
+                              label: const Text('Stop Blocker'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.error,
+                                foregroundColor: Theme.of(context).colorScheme.onError,
+                                minimumSize: const Size(double.infinity, 50),
+                              ),
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: _showTimeSettingDialog,
+                              icon: const Icon(Icons.lock_open),
+                              label: const Text('Activate Blocker'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                minimumSize: const Size(double.infinity, 50),
+                              ),
+                            ),
                 ),
                 // Banner Ad
                 if (_isBannerAdLoaded && _bannerAd != null)

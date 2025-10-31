@@ -4,37 +4,33 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
-import android.content.Context
-import android.content.pm.PackageManager
 import com.example.flow.BlockManager
+import com.example.flow.MainActivity
+import android.view.accessibility.AccessibilityNodeInfo
 
-// This AccessibilityService detects which app is currently in the foreground.
 class AppDetectAccessibilityService : AccessibilityService() {
 
     private var currentForegroundPackage: String? = null
 
-    // A list of common system UI packages that should not dismiss the overlay.
-    // This is a heuristic and might need updates for specific device manufacturers.
     private val systemUiPackages = setOf(
-        "com.android.systemui", // Notification shade, status bar, navigation bar
-        "com.google.android.apps.nexuslauncher", // Pixel Launcher
-        "com.android.launcher3", // Generic Android Launcher
-        "com.sec.android.app.launcher", // Samsung Launcher
-        "com.huawei.android.launcher", // Huawei Launcher
-        "com.miui.home", // Xiaomi Launcher
-        "com.oneplus.launcher", // OnePlus Launcher
-        "com.oppo.launcher", // Oppo Launcher
-        "com.vivo.launcher", // Vivo Launcher
-        "com.google.android.apps.wellbeing", // Digital Wellbeing
-        "com.google.android.packageinstaller", // Package installer
-        "com.android.settings", // Settings app
-        "android" // The Android system itself (for some dialogs)
+        "com.android.systemui",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher3",
+        "com.sec.android.app.launcher",
+        "com.huawei.android.launcher",
+        "com.miui.home",
+        "com.oneplus.launcher",
+        "com.oppo.launcher",
+        "com.vivo.launcher",
+        "com.google.android.apps.wellbeing",
+        "com.google.android.packageinstaller",
+        "com.android.settings",
+        "android"
     )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val packageName = event?.packageName?.toString()
 
-        // Filter out events from our own package to reduce log spam and unnecessary processing.
         if (packageName == getPackageName()) {
             return
         }
@@ -47,13 +43,53 @@ class AppDetectAccessibilityService : AccessibilityService() {
                 handleAppChange(packageName)
             }
         }
+
+        // For Chrome, we need to listen for more event types to capture URL changes
+        if (packageName == "com.android.chrome" && (
+                    event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+                    event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    )) {
+            val source = event.source
+            source?.let {
+                val url = findUrlInNode(it)
+                if (url != null) {
+                    Log.d("AccessibilityService", "Chrome URL detected: $url")
+                    MainActivity.sendUrlToFlutter(url)
+                }
+                it.recycle()
+            }
+        }
+    }
+
+    private fun findUrlInNode(node: AccessibilityNodeInfo): String? {
+        // Chrome's URL bar has a resource ID "com.android.chrome:id/url_bar"
+        val urlBarNodes = node.findAccessibilityNodeInfosByViewId("com.android.chrome:id/url_bar")
+        if (urlBarNodes.isNotEmpty()) {
+            val urlBar = urlBarNodes[0]
+            val url = urlBar.text?.toString()
+            urlBar.recycle()
+            if (!url.isNullOrEmpty()) {
+                return url
+            }
+        }
+
+        // Fallback: iterate through children if the above fails
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            child?.let {
+                val url = findUrlInNode(it)
+                if (url != null) {
+                    return url
+                }
+                it.recycle()
+            }
+        }
+        return null
     }
 
     private fun handleAppChange(packageName: String) {
         Log.d("AccessibilityService", "handleAppChange: $packageName")
 
-        // Ignore our own app's package name, as it's the overlay itself.
-        // This check is now redundant due to the filter in onAccessibilityEvent, but kept for safety.
         if (packageName == getPackageName()) {
             Log.d("AccessibilityService", "Ignoring our own package: $packageName")
             return
@@ -62,8 +98,6 @@ class AppDetectAccessibilityService : AccessibilityService() {
         val isAppBlocked = BlockManager.isAppBlocked(packageName)
 
         if (isAppBlocked) {
-            // If the new app is blocked, immediately launch the home screen
-            // to send the blocked app to the background.
             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -71,26 +105,19 @@ class AppDetectAccessibilityService : AccessibilityService() {
             startActivity(homeIntent)
             Log.d("AccessibilityService", "Blocked app ($packageName) detected. Launching home screen.")
 
-            // Send command to OverlayService to show the overlay.
             val showOverlayIntent = Intent(this, OverlayService::class.java).apply {
                 action = OverlayService.ACTION_SHOW_OVERLAY
             }
             startService(showOverlayIntent)
             Log.d("AccessibilityService", "Sending SHOW_OVERLAY command.")
         } else {
-            // If the new app is NOT blocked:
-            // We need to decide if it's a genuine switch to a non-blocked app
-            // or a temporary system UI element (like notification shade, recent apps, etc.).
-
             if (!systemUiPackages.contains(packageName)) {
-                // It's a non-blocked, non-system app. Send command to OverlayService to hide the overlay.
                 val hideOverlayIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_HIDE_OVERLAY
                 }
                 startService(hideOverlayIntent)
                 Log.d("AccessibilityService", "Sending HIDE_OVERLAY command for $packageName.")
             } else {
-                // It's a system UI package. Do nothing, the overlay should remain if active.
                 Log.d("AccessibilityService", "System UI ($packageName) detected. Keeping OverlayService active if it was.")
             }
         }
@@ -98,7 +125,6 @@ class AppDetectAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.d("AccessibilityService", "onInterrupt: Service interrupted.")
-        // Send command to OverlayService to hide the overlay if the service is interrupted.
         val hideOverlayIntent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_HIDE_OVERLAY
         }
@@ -109,16 +135,10 @@ class AppDetectAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         Log.d("AccessibilityService", "Service Connected.")
         BlockManager.initialize(this)
-
-        // Start OverlayService once and keep it running.
-        // val startOverlayServiceIntent = Intent(this, OverlayService::class.java)
-        // startService(startOverlayServiceIntent)
-        // Log.d("AccessibilityService", "OverlayService started persistently.")
     }
 
     override fun onDestroy() {
         Log.d("AccessibilityService", "Service Destroyed.")
-        // Stop the persistently running OverlayService when AccessibilityService is destroyed.
         val stopOverlayServiceIntent = Intent(this, OverlayService::class.java)
         stopService(stopOverlayServiceIntent)
         super.onDestroy()

@@ -1,10 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.flow">
 
-    <!-- Permissions for overlay window, usage stats, and foreground service -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission 
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        xmlns:tools="http://schemas.android.com/tools"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    
+    <!-- YEH NAYI PERMISSION ADD KI GAYI HAI (CRASH FIX KE LIYE) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="Flow App Blocker"
@@ -30,12 +37,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Accessibility Service for detecting foreground apps -->
         <service
             android:name=".services.AppDetectAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false"
-            android:label="Flow App Blocker Service">
+            android:exported="true"
+            android:label="Flow App">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
@@ -44,11 +50,14 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- Service for displaying the blocking overlay -->
         <service
             android:name=".services.OverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
+
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="mediaPlayback" />
 
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
@@ -60,7 +69,6 @@
     </application>
 
     <queries>
-        <!-- Specific package visibility for the apps we want to find -->
         <package android:name="com.instagram.android" />
         <package android:name="com.google.android.youtube" />
         <package android:name="com.snapchat.android" />
