@@ -30,8 +30,8 @@ class _AppSelectionPageState extends State<AppSelectionPage> {
   Future<void> _loadApps() async {
     final apps = await DeviceApps.getInstalledApplications(
       includeAppIcons: true,
-      includeSystemApps: true, // System apps dikhayega
-      onlyAppsWithLaunchIntent: true, // SIRF launch wale apps
+      includeSystemApps: true, 
+      onlyAppsWithLaunchIntent: true, // Sirf wahi apps jo phone me dikhte hain
     );
     
     apps.sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
@@ -93,14 +93,19 @@ class _AppSelectionPageState extends State<AppSelectionPage> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 80, top: 10),
-                      itemCount: _filteredApps.length,
-                      itemBuilder: (context, index) {
-                        final app = _filteredApps[index];
-                        final isSelected = _selectedApps.contains(app.packageName);
-                        return _buildAppListTile(app, isSelected);
-                      },
+                  // --- YAHAN CHANGE HUA (Scrollbar add kiya) ---
+                  : Scrollbar(
+                      thumbVisibility: true, // Scrollbar hamesha dikhega
+                      radius: const Radius.circular(8),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 80, top: 10),
+                        itemCount: _filteredApps.length,
+                        itemBuilder: (context, index) {
+                          final app = _filteredApps[index];
+                          final isSelected = _selectedApps.contains(app.packageName);
+                          return _buildAppListTile(app, isSelected);
+                        },
+                      ),
                     ),
             ),
           ],
@@ -174,12 +179,13 @@ class _AppSelectionPageState extends State<AppSelectionPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              subtitle: Text(
-                app.packageName,
-                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              // --- YAHAN CHANGE HUA (Package name hata diya) ---
+              // subtitle: Text(
+              //   app.packageName,
+              //   style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
+              //   maxLines: 1,
+              //   overflow: TextOverflow.ellipsis,
+              // ),
               trailing: Checkbox(
                 value: isSelected,
                 onChanged: (bool? value) {
