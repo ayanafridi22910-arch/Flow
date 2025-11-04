@@ -34,7 +34,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     }
   }
 
-  // --- Data Logic (Koi change nahi) ---
+  // --- Data Logic (No change) ---
   
   Future<void> _loadScheduleData() async {
     final profilesBox = Hive.box('focusProfiles');
@@ -87,7 +87,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     super.dispose();
   }
 
-  // --- NAYA BUILD METHOD ---
+  // --- Build Method (No change) ---
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +105,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      // --- BODY AB COLUMN/EXPANDED NAHI, SIRF SCROLL VIEW HAI ---
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0),
         child: Form(
@@ -115,11 +114,10 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
             children: [
               const SizedBox(height: 16),
               
-              // --- Schedule Name (No change) ---
               _buildSectionHeader('Schedule Name'),
               TextFormField(
                 controller: _nameController,
-                style: const TextStyle(color: Colors.white, fontSize: 20),
+                style: const TextStyle(color: Colors.white),
                 decoration: _buildInputDecoration('e.g. "Office Work"'),
                 maxLength: 50,
                 validator: (value) {
@@ -131,7 +129,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
               ),
               const SizedBox(height: 24),
 
-              // --- Time Pickers (No change) ---
               _buildSectionHeader('Time'),
               Row(
                 children: [
@@ -150,7 +147,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
               ),
               const SizedBox(height: 24),
 
-              // --- Day Selector (No change) ---
               _buildSectionHeader('Repeat on'),
               const SizedBox(height: 12),
               Row(
@@ -161,20 +157,17 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
               ),
               const SizedBox(height: 24),
 
-              // --- App Selector (No change) ---
               _buildSectionHeader('Apps'),
               _buildAppSelectorCard(),
               const SizedBox(height: 24),
               
-              // --- YAHAN CHANGE HUA: Blocking Mode section ab form ka hissa hai ---
               _buildModeSection(),
               
-              const SizedBox(height: 32), // Save button se pehle space
+              const SizedBox(height: 32),
               
-              // --- YAHAN CHANGE HUA: Save Button bhi ab form ka hissa hai ---
               _buildSaveButton(),
               
-              const SizedBox(height: 40), // Scroll ke end me extra space
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -184,7 +177,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
 
   // --- Helper Widgets ---
 
-  /// Section Header ke liye (No change)
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -199,29 +191,20 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Naya Glassy Time Picker Card (No change)
+  // --- YAHAN BADA CHANGE HUA ---
+  /// Naya Glassy Time Picker Card (Ab Custom Dialog Kholega)
   Widget _buildGlassTimePicker(String label, TimeOfDay? time, Function(TimeOfDay) onTimeChanged) {
     return Expanded(
       child: GestureDetector(
         onTap: () async {
-          final selectedTime = await showTimePicker(
+          // --- Default showTimePicker ki jagah Custom showDialog ---
+          final selectedTime = await showDialog<TimeOfDay>(
             context: context,
-            initialTime: time ?? TimeOfDay.now(),
-            builder: (context, child) {
-              return Theme(
-                data: ThemeData.dark().copyWith(
-                  colorScheme: const ColorScheme.dark(
-                    primary: Colors.blueAccent,
-                    onPrimary: Colors.white,
-                    surface: Color(0xFF1A1C2A),
-                    onSurface: Colors.white,
-                  ),
-                  dialogBackgroundColor: const Color(0xFF0F111E),
-                ),
-                child: child!,
-              );
+            builder: (BuildContext context) {
+              return _CustomTimeSelectorDialog(initialTime: time ?? TimeOfDay.now());
             },
           );
+          
           if (selectedTime != null) {
             onTimeChanged(selectedTime);
           }
@@ -233,9 +216,9 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               decoration: BoxDecoration(
-                color: Colors.blueAccent.withOpacity(0.2),
+                color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blueAccent.withOpacity(0.5)),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,6 +229,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
+                    // Time ko 12-hour format me dikhane ke liye
                     time?.format(context) ?? 'Not Set',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
@@ -262,7 +246,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Naya Day Toggle Button (No change)
   Widget _buildDayToggle(String day, int index) {
     bool isSelected = _days[index];
     return GestureDetector(
@@ -291,7 +274,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Naya Glassy App Selector Card (No change)
   Widget _buildAppSelectorCard() {
     return GestureDetector(
       onTap: () async {
@@ -344,12 +326,10 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Standard Input Field ka Style (No change)
   InputDecoration _buildInputDecoration(String labelText) {
     return InputDecoration(
       labelText: labelText,
       labelStyle: const TextStyle(color: Colors.white70),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       filled: true,
       fillColor: const Color(0xFF1A1C2A), 
       border: OutlineInputBorder(
@@ -364,10 +344,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
   
-  // --- YE FUNCTION HATA DIYA ---
-  // Widget _buildBottomBar() { ... }
-  
-  // --- NAYA FUNCTION: Sirf Mode buttons ke liye ---
   Widget _buildModeSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,7 +362,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Mode Button (No change)
   Widget _buildModeButton(String label, int index, Color color) {
     final isSelected = _selectedMode == index;
     return GestureDetector(
@@ -419,7 +394,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Naya Gradient Save Button (No change)
   Widget _buildSaveButton() {
     return GestureDetector(
       onTap: _saveSchedule,
@@ -456,92 +430,237 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
   }
 }
 
-// --- CustomTimePicker Code (Ise chheda nahi hai) ---
-class CustomTimePicker extends StatefulWidget {
+// --- YAHAN POORA CHANGE HUA: Puraana CustomTimePicker hata kar naya spinner wala dialog ---
+
+class _CustomTimeSelectorDialog extends StatefulWidget {
   final TimeOfDay initialTime;
 
-  const CustomTimePicker({Key? key, required this.initialTime}) : super(key: key);
+  const _CustomTimeSelectorDialog({required this.initialTime});
 
   @override
-  _CustomTimePickerState createState() => _CustomTimePickerState();
+  _CustomTimeSelectorDialogState createState() => _CustomTimeSelectorDialogState();
 }
 
-class _CustomTimePickerState extends State<CustomTimePicker> {
-  late TextEditingController _hourController;
-  late TextEditingController _minuteController;
-  late String _period;
+class _CustomTimeSelectorDialogState extends State<_CustomTimeSelectorDialog> {
+  late int _selectedHour; // 1-12
+  late int _selectedMinute;
+  late bool _isAM;
+
+  late FixedExtentScrollController _hourController;
+  late FixedExtentScrollController _minuteController;
+  
+  // Hour ko 12-format me convert karna
+  int _getHourIn12(int hour) {
+    if (hour == 0) return 12; // 12 AM
+    if (hour > 12) return hour - 12; // PM hours
+    return hour;
+  }
+  
+  // AM hai ya PM check karna
+  bool _isAm(int hour) {
+    return hour < 12;
+  }
 
   @override
   void initState() {
     super.initState();
-    _hourController = TextEditingController(text: widget.initialTime.hourOfPeriod.toString());
-    if (widget.initialTime.hourOfPeriod == 0) {
-      _hourController.text = '12';
+    _selectedHour = _getHourIn12(widget.initialTime.hour);
+    _selectedMinute = widget.initialTime.minute;
+    _isAM = _isAm(widget.initialTime.hour);
+
+    // Controller ko initial value pe set karna (index 0-based hota hai)
+    _hourController = FixedExtentScrollController(initialItem: _selectedHour - 1); // 1-12 hai, isliye -1
+    _minuteController = FixedExtentScrollController(initialItem: _selectedMinute);
+  }
+  
+  @override
+  void dispose() {
+    _hourController.dispose();
+    _minuteController.dispose();
+    super.dispose();
+  }
+
+  void _onSave() {
+    // Wapas 24-hour format me convert karna
+    int hourIn24;
+    if (_isAM) {
+      hourIn24 = (_selectedHour == 12) ? 0 : _selectedHour; // 12 AM -> 0
+    } else {
+      hourIn24 = (_selectedHour == 12) ? 12 : _selectedHour + 12; // 12 PM -> 12, 1 PM -> 13
     }
-    _minuteController = TextEditingController(text: widget.initialTime.minute.toString().padLeft(2, '0'));
-    _period = widget.initialTime.period == DayPeriod.am ? 'AM' : 'PM';
+    
+    final selectedTime = TimeOfDay(hour: hourIn24, minute: _selectedMinute);
+    Navigator.of(context).pop(selectedTime);
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Select Time'),
-      content: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 60,
-            child: TextField(
-              controller: _hourController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+    return Dialog(
+      backgroundColor: Colors.transparent, // Background transparent rakha
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1C2A).withOpacity(0.8), // Glassy color
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Select Time',
+                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 24),
+                // --- Spinner UI ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Hour Spinner
+                    _buildSpinner(
+                      controller: _hourController,
+                      itemCount: 12,
+                      onChanged: (index) {
+                        setState(() {
+                          _selectedHour = index + 1; // 0-11 index -> 1-12 value
+                        });
+                      },
+                      // List 1 se 12 tak
+                      labels: List.generate(12, (i) => (i + 1).toString().padLeft(2, '0')),
+                    ),
+                    Text(":", style: GoogleFonts.poppins(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600)),
+                    // Minute Spinner
+                    _buildSpinner(
+                      controller: _minuteController,
+                      itemCount: 60,
+                      onChanged: (index) {
+                        setState(() {
+                          _selectedMinute = index;
+                        });
+                      },
+                      // List 00 se 59 tak
+                      labels: List.generate(60, (i) => i.toString().padLeft(2, '0')),
+                    ),
+                    const SizedBox(width: 16),
+                    // AM/PM Toggle
+                    _buildAmPmToggle(),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // --- Action Buttons ---
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: _onSave,
+                        child: Text(
+                          'OK',
+                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          const Text(':'),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 60,
-            child: TextField(
-              controller: _minuteController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-            ),
-          ),
-          const SizedBox(width: 16),
-          ToggleButtons(
-            isSelected: [_period == 'AM', _period == 'PM'],
-            onPressed: (index) {
-              setState(() {
-                _period = index == 0 ? 'AM' : 'PM';
-              });
-            },
-            children: const [Text('AM'), Text('PM')],
-          ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            int hour = int.tryParse(_hourController.text) ?? 0;
-            final int minute = int.tryParse(_minuteController.text) ?? 0;
-            if (_period == 'PM' && hour != 12) {
-              hour += 12;
-            }
-            if (_period == 'AM' && hour == 12) {
-              hour = 0;
-            }
-            Navigator.of(context).pop(TimeOfDay(hour: hour, minute: minute));
-          },
-          child: const Text('OK'),
-        ),
+    );
+  }
+  
+  /// AM/PM Toggle ke liye
+  Widget _buildAmPmToggle() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildAmPmButton('AM', _isAM),
+        const SizedBox(height: 8),
+        _buildAmPmButton('PM', !_isAM),
       ],
+    );
+  }
+  
+  Widget _buildAmPmButton(String label, bool isSelected) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isAM = (label == 'AM');
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blueAccent : Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Spinner wheel ke liye
+  Widget _buildSpinner({
+    required FixedExtentScrollController controller,
+    required int itemCount,
+    required ValueChanged<int> onChanged,
+    required List<String> labels,
+  }) {
+    return Container(
+      width: 70,
+      height: 120,
+      child: ListWheelScrollView.useDelegate(
+        controller: controller,
+        itemExtent: 50, // Har item ki height
+        perspective: 0.005,
+        diameterRatio: 1.2,
+        physics: const FixedExtentScrollPhysics(),
+        onSelectedItemChanged: onChanged,
+        childDelegate: ListWheelChildBuilderDelegate(
+          childCount: itemCount,
+          builder: (context, index) {
+            final label = labels[index];
+            // Check if this item is selected
+            final bool isSelected = (controller.hasClients && controller.selectedItem == index);
+            
+            return Center(
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 150),
+                style: GoogleFonts.poppins(
+                  fontSize: isSelected ? 28 : 22,
+                  color: isSelected ? Colors.white : Colors.white54,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+                child: Text(label),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
