@@ -12,6 +12,9 @@ import 'package:flow/native_blocker.dart';
 import 'package:flow/screens/permission_page_redesigned.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_apps/device_apps.dart';
+import 'dart:ui';
+
+import 'dart:ui';
 
 // --- Custom Widgets for Zen Focus Theme ---
 
@@ -321,7 +324,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         'endTime': '17:00',
         'days': [true, true, true, true, true, false, false], // Mon-Fri
         'apps': <String>['com.google.android.gm', 'com.google.android.apps.messaging'],
-        'isEnabled': false,
+        'isEnabled': true,
       });
       await profilesBox.put('study', {
         'name': 'Study Focus',
@@ -330,7 +333,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         'endTime': '21:00',
         'days': [true, true, true, true, true, false, false],
         'apps': <String>['com.instagram.android', 'com.facebook.katana'],
-        'isEnabled': false,
+        'isEnabled': true,
       });
       await profilesBox.put('free', {
         'name': 'Distraction Free',
@@ -339,7 +342,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         'endTime': '07:00',
         'days': List.filled(7, true),
         'apps': <String>['com.instagram.android', 'com.google.android.youtube', 'com.netflix.mediaclient'],
-        'isEnabled': false,
+        'isEnabled': true,
       });
       await blockerBox.put('default_schedules_created', true);
     }
@@ -508,41 +511,76 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
 
   Widget _buildActiveSessionDisplay() {
     return Container(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(24.0),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF001C40).withOpacity(0.8),
+            const Color(0xFF000820).withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: Column(
         children: [
-          Text('Focus Mode: Active', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 15),
-          FocusOrb(countdownDuration: _focusCountdown, totalDuration: _currentFocusSessionTotalDuration, isActive: true, size: 120),
-          const SizedBox(height: 15),
+          Text(
+            'Focus Mode: Active',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 24),
+          FocusOrb(
+            countdownDuration: _focusCountdown,
+            totalDuration: _currentFocusSessionTotalDuration,
+            isActive: true,
+            size: 150, // Increased size
+          ),
+          const SizedBox(height: 24),
           if (_focusSessionAppIconWidgets.isNotEmpty)
             Column(
               children: [
-                Text('Blocking:', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 8),
-                SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, children: _focusSessionAppIconWidgets)),
+                Text(
+                  'Blocking:',
+                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: _focusSessionAppIconWidgets,
+                  ),
+                ),
               ],
             ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           BouncyButton(
             onTap: _stopFocusSession,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.redAccent, width: 1.5),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.redAccent.shade100, width: 2),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.power_settings_new, size: 20, color: Colors.redAccent),
-                  SizedBox(width: 8),
-                  Text('End Session', style: TextStyle(color: Colors.redAccent)),
+                  Icon(Icons.power_settings_new, size: 22, color: Colors.redAccent.shade100),
+                  const SizedBox(width: 12),
+                  Text(
+                    'End Session',
+                    style: TextStyle(
+                      color: Colors.redAccent.shade100,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -555,8 +593,16 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
   Widget _buildIdleStateDisplay() {
     return Column(
       children: [
-        Text('Ready to activate your Flow State?', style: GoogleFonts.poppins(color: Colors.white.withOpacity(0.9), fontSize: 20, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
-        const SizedBox(height: 30),
+        Text(
+          'Ready to Focus?',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 40),
         BouncyButton(
           onTap: () async {
             final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
@@ -570,22 +616,33 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
             height: 60,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.blueAccent.shade700,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF00A6FF), Color(0xFF0062E8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.blueAccent.withOpacity(0.4),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+                  color: const Color(0xFF00A6FF).withOpacity(0.5),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.stars, color: Colors.white, size: 28),
-                const SizedBox(width: 8),
-                Text('Start Custom Session', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
+                const SizedBox(width: 12),
+                Text(
+                  'Start Blocking',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -618,121 +675,84 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     final String name = profileData['name'] ?? 'Unnamed Profile';
     final Widget iconWidget = _getIconForSchedule(profileData['icon'] ?? '', name);
     final List<bool> days = List<bool>.from(profileData['days'] ?? List.filled(7, false));
-    final String time = '${profileData['startTime'] ?? '--:--'} - ${profileData['endTime'] ?? '--:--'}';
+    final String rawStartTime = profileData['startTime'] ?? '00:00';
+    final String rawEndTime = profileData['endTime'] ?? '00:00';
+    final String time;
+    if (rawStartTime == '00:00' && rawEndTime == '00:00') {
+      time = 'Not Set';
+    } else {
+      time = '${_formatTime12Hour(rawStartTime)} - ${_formatTime12Hour(rawEndTime)}';
+    }
     final List<String> apps = (profileData['apps'] as List?)?.cast<String>() ?? [];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              iconWidget,
-              const SizedBox(width: 15),
-              Expanded(
-                child: Text(
-                  name,
-                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-              BouncyButton(
-                onTap: () async {
-                  await Navigator.push(context, MaterialPageRoute(builder: (context) => ScheduleEditPage(profileId: profileId)));
-                  _loadFocusSchedules();
-                },
-                child: const Icon(Icons.edit, color: Colors.white70),
-              ),
-              const SizedBox(width: 8),
-              BouncyButton(
-                onTap: () {
-                  _showDeleteConfirmationDialog(profileId);
-                },
-                child: const Icon(Icons.delete, color: Colors.redAccent),
-              ),
-            ],
-          ),
-          const Divider(color: Colors.white24, height: 30),
-          Text('Schedule', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16)),
-          const SizedBox(height: 8),
-          Text(time, style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 18)),
-          const SizedBox(height: 8),
-          _buildDayIndicators(days),
-          const SizedBox(height: 15),
-          Text('Blocked Apps (${apps.length})', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16)),
-          const SizedBox(height: 10),
-          if (apps.isNotEmpty)
-            SizedBox(
-              height: 32,
-              child: FutureBuilder<List<Widget>>(
-                future: _getAppIcons(apps),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox.shrink();
-                  return ListView(scrollDirection: Axis.horizontal, children: snapshot.data!);
-                },
-              ),
+      margin: const EdgeInsets.only(bottom: 30),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
             ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              BouncyButton(
-                onTap: () {
-                  final startTimeParts = (profileData['startTime'] as String).split(':');
-                  final endTimeParts = (profileData['endTime'] as String).split(':');
-                  final startTime = TimeOfDay(hour: int.parse(startTimeParts[0]), minute: int.parse(startTimeParts[1]));
-                  var endHour = int.parse(endTimeParts[0]);
-                  var endMinute = int.parse(endTimeParts[1]);
-
-                  // Handle overnight schedules
-                  if (endHour < startTime.hour || (endHour == startTime.hour && endMinute < startTime.minute)) {
-                    endHour += 24; // Add 24 hours for the next day
-                  }
-
-                  final now = DateTime.now();
-                  final startDateTime = DateTime(now.year, now.month, now.day, startTime.hour, startTime.minute);
-                  final endDateTime = DateTime(now.year, now.month, now.day, endHour, endMinute);
-
-                  final duration = endDateTime.difference(startDateTime);
-                  _startFocusSession(apps, duration);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.play_arrow, size: 18, color: Colors.white),
-                      SizedBox(width: 4),
-                      Text('Activate', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    iconWidget,
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    BouncyButton(
+                      onTap: () async {
+                        await Navigator.push(context, MaterialPageRoute(builder: (context) => ScheduleEditPage(profileId: profileId)));
+                        _loadFocusSchedules();
+                      },
+                      child: const Icon(Icons.edit, color: Colors.white70),
+                    ),
+                    const SizedBox(width: 8),
+                    BouncyButton(
+                      onTap: () {
+                        _showDeleteConfirmationDialog(profileId);
+                      },
+                      child: const Icon(Icons.delete, color: Colors.redAccent),
+                    ),
+                  ],
                 ),
-              ),
-              Column(
-                children: [
-                  const Text('Auto', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  Switch(value: profileData['isEnabled'] ?? false, onChanged: (val) async {
-                    final profilesBox = Hive.box('focusProfiles');
-                    profileData['isEnabled'] = val;
-                    await profilesBox.put(profileId, profileData);
-                    _loadFocusSchedules();
-                  }),
-                ],
-              )
-            ],
-          )
-        ],
+                const SizedBox(height: 10),
+                Text(time, style: GoogleFonts.poppins(color: Colors.white, fontSize: 18)),
+                const SizedBox(height: 8),
+                _buildDayIndicators(days),
+                const SizedBox(height: 15),
+                Text('Blocked Apps (${apps.length})', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16)),
+                if (apps.isNotEmpty)
+                  SizedBox(
+                    height: 40,
+                    child: FutureBuilder<List<Widget>>(
+                      future: _getAppIcons(apps),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox.shrink();
+                        return ListView(
+                          padding: const EdgeInsets.only(top: 8),
+                          scrollDirection: Axis.horizontal,
+                          children: snapshot.data!,
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -802,6 +822,29 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     if (d.inHours > 0) return '${twoDigits(d.inHours)}h ${twoDigits(d.inMinutes.remainder(60))}m';
     return '${twoDigits(d.inMinutes)}m';
+  }
+
+  String _formatTime12Hour(String time) {
+    try {
+      final parts = time.split(':');
+      if (parts.length != 2) return time;
+      int hour = int.parse(parts[0]);
+      final int minute = int.parse(parts[1]);
+      final String minuteStr = minute.toString().padLeft(2, '0');
+      String period = 'AM';
+      if (hour >= 12) {
+        period = 'PM';
+        if (hour > 12) {
+          hour -= 12;
+        }
+      }
+      if (hour == 0) {
+        hour = 12;
+      }
+      return '$hour:$minuteStr $period';
+    } catch (e) {
+      return time; // Return original time if parsing fails
+    }
   }
 
   Future<void> _deleteSchedule(String profileId) async {

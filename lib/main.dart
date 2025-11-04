@@ -24,6 +24,7 @@ class MyApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
         brightness: Brightness.dark,
       ),
+      debugShowCheckedModeBanner: false,
       home: const AppShell(), // Set AppShell as the home
     );
   }
