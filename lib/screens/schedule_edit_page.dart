@@ -1,8 +1,11 @@
-import 'package:flow/screens/home_page.dart';
+import 'package:flow/screens/app_selection_page.dart'; // <-- NAYA IMPORT
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:ui'; // Glassmorphism ke liye
+
+// 'home_page.dart' import hata diya kyunki ab zaroorat nahi
+// import 'package:flow/screens/home_page.dart'; 
 
 class ScheduleEditPage extends StatefulWidget {
   final String? profileId;
@@ -87,7 +90,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     super.dispose();
   }
 
-  // --- NAYA HELPER: 12-Hour format ke liye ---
   String _formatTime(TimeOfDay? time) {
     if (time == null) return 'Not Set';
     
@@ -98,7 +100,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     return '$hour:$minute $period';
   }
 
-  // --- BUILD METHOD (Thoda change) ---
+  // --- BUILD METHOD (No-Scroll wala) ---
 
   @override
   Widget build(BuildContext context) {
@@ -124,20 +126,18 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-        body: SingleChildScrollView(
+        body: Padding( 
           padding: const EdgeInsets.symmetric(horizontal: 20.0),
           child: Form(
             key: _formKey,
-            child: Column(
+            child: Column( 
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
                 
-                // --- YAHAN CHANGE KIYA ---
-                _buildSectionHeader('Schedule Title'), // Header daal diya
+                _buildSectionHeader('Schedule Title'),
                 _buildNameField(),
                 const SizedBox(height: 24),
-                // --- END CHANGE ---
 
                 _buildSectionHeader('Time'),
                 Row(
@@ -170,16 +170,16 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
                 const SizedBox(height: 24),
 
                 _buildSectionHeader('Apps'),
-                _buildAppSelectorCard(),
+                _buildAppSelectorCard(), // <-- YEH UPDATE HO GAYA HAI
                 const SizedBox(height: 24),
                 
                 _buildModeSection(),
                 
-                const SizedBox(height: 32),
+                const Spacer(), // Save button ko neeche push karne ke liye
                 
                 _buildSaveButton(),
                 
-                const SizedBox(height: 40),
+                const SizedBox(height: 24), 
               ],
             ),
           ),
@@ -190,7 +190,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
 
   // --- Helper Widgets ---
 
-  /// Bada, glassy name field
   Widget _buildNameField() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -235,13 +234,10 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      // --- YAHAN CHANGE KIYA ---
-      // Name field ke header ke liye alag se padding
       padding: EdgeInsets.only(
         bottom: 12.0, 
-        left: (title == 'Schedule Title') ? 4.0 : 0.0 // Thoda sa left padding
+        left: (title == 'Schedule Title') ? 4.0 : 0.0
       ),
-      // --- END CHANGE ---
       child: Text(
         title,
         style: GoogleFonts.poppins(
@@ -253,7 +249,6 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
-  /// Time Picker (Colored + 12-hour format)
   Widget _buildGlassTimePicker(String label, TimeOfDay? time, Color tintColor, Function(TimeOfDay) onTimeChanged) {
     return Expanded(
       child: GestureDetector(
@@ -333,16 +328,24 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
     );
   }
 
+  // --- YAHAN MAIN CHANGE HUA ---
   Widget _buildAppSelectorCard() {
     return GestureDetector(
       onTap: () async {
-        final selectedApps = await Navigator.push<Map<String, dynamic>>(
+        // Naya navigation code
+        final selectedApps = await Navigator.push<List<String>>(
           context,
-          MaterialPageRoute(builder: (context) => const HomePage(isSelectionMode: true)),
+          MaterialPageRoute(
+            builder: (context) => AppSelectionPage(
+              previouslySelectedApps: _apps, // Purane selected apps ko pass kiya
+            ),
+          ),
         );
-        if (selectedApps != null && selectedApps['selectedApps'] is List) {
+        
+        // Naya data waapas lene ka code
+        if (selectedApps != null) {
           setState(() {
-            _apps = (selectedApps['selectedApps'] as List).cast<String>();
+            _apps = selectedApps; // List ko seedha update kiya
           });
         }
       },
@@ -384,6 +387,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
       ),
     );
   }
+  // --- END CHANGE ---
 
   Widget _buildModeSection() {
     return Column(
@@ -446,7 +450,7 @@ class _ScheduleEditPageState extends State<ScheduleEditPage> {
           gradient: const LinearGradient(
             colors: [Colors.blueAccent, Color(0xFF007FFF)],
             begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
+            end: Alignment.bottomRight,
           ),
           boxShadow: [
             BoxShadow(
