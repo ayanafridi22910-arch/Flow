@@ -723,7 +723,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
                       },
                       child: const Icon(Icons.edit, color: Colors.white70),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 16),
                     BouncyButton(
                       onTap: () {
                         _showDeleteConfirmationDialog(profileId);
