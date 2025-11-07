@@ -1,101 +1,87 @@
 import 'dart:async';
-import 'package:device_apps/device_apps.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // Added import for kDebugMode
+import 'package:flutter/material.dart'; // <-- FIX
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:numberpicker/numberpicker.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart'; // Added import
-import 'package:hive_flutter/hive_flutter.dart'; // Added import for Hive
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flow/screens/app_selection_page.dart'; // <-- FIX
+import 'dart:ui'; 
+
 import '../native_blocker.dart';
 import '../blocker_service.dart';
 
 class HomePage extends StatefulWidget {
-  final Duration? initialDuration;
-  final bool isSelectionMode; // New parameter
-
-  const HomePage({super.key, this.initialDuration, this.isSelectionMode = false});
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  // --- State Variables ---
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+
   Duration _countdownDuration = Duration.zero;
+  Duration _selectedDuration = Duration.zero;
   Timer? _countdownTimer;
   bool _isBlockingActive = false;
 
-  List<Application> _distractiveApps = [];
-  Set<String> _selectedBlockedApps = {}; // Apps selected by the user via switches
+  Set<String> _quickBlockApps = {};
   bool _isLoading = true;
 
-  final Set<String> _targetPackageNames = {
-    'com.instagram.android',
-    'com.google.android.youtube',
-    'com.snapchat.android',
-    'com.netflix.mediaclient',
-    'com.sonyliv',
-    'com.facebook.katana',
-    'com.android.chrome',
-  };
+  int _selectedQuickMode = 0; // 0: Normal, 1: Strict
+  int _activeFocusMode = 0;   // 0: Normal, 1: Strict
 
-  // Banner Ad variables
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
-
-  // Rewarded Ad variables
   RewardedAd? _rewardedAd;
   bool _isRewardedAdLoaded = false;
+  // --- NAYA INTERSTITIAL AD ---
+  InterstitialAd? _interstitialAd;
 
-  // --- Lifecycle & Data Loading ---
+  late TabController _tabController;
+
+  static const Color _quickFocusColor = Colors.cyan;
+  static const Color _deepFocusColor = Color(0xFF8b5cf6);
+  static const Color _activeColor = Colors.blueAccent;
+
+  static const Color _normalColor = Colors.green;
+  static const Color _strictColor = Colors.red;
+
+  static const Duration _unlimitedDuration = Duration(days: 999);
+
+
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _loadBannerAd(); // Load banner ad
-    _loadRewardedAd(); // Load rewarded ad
-    _loadBlockingState(); // Load persisted blocking state
+    _tabController = TabController(length: 2, vsync: this);
 
-    // If an initial duration is provided, start blocking immediately
-    if (widget.initialDuration != null && !_isBlockingActive) {
-      // We need to ensure apps are loaded before starting blocking
-      // This might require a slight delay or a different flow
-      // For now, we'll assume _loadData completes quickly enough
-      // or that _startBlocking handles the case where _selectedBlockedApps is empty
-      // (which it does by showing a SnackBar)
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && widget.initialDuration != null) {
-          _startBlocking(widget.initialDuration!); // Start blocking with the provided duration
-        }
-      });
-    }
+    _loadData();
+    _loadBannerAd();
+    _loadRewardedAd();
+    _loadInterstitialAd(); // <-- NAYA CALL
+    _loadBlockingState();
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _bannerAd?.dispose(); // Dispose banner ad
-    _rewardedAd?.dispose(); // Dispose rewarded ad
+    _bannerAd?.dispose();
+    _rewardedAd?.dispose();
+    _interstitialAd?.dispose(); // <-- NAYA
+    _tabController.dispose();
     super.dispose();
   }
 
+  // --- Ad Logic (Updated) ---
   void _loadBannerAd() {
     _bannerAd = BannerAd(
-      adUnitId: 'ca-app-pub-4968291987364468/5607208296', // Tumhara real Banner Ad Unit ID
+      adUnitId: 'ca-app-pub-3940256099942544/6300978111',
       request: const AdRequest(),
       size: AdSize.banner,
       listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          setState(() {
-            _isBannerAdLoaded = true;
-          });
-        },
+        onAdLoaded: (ad) { setState(() { _isBannerAdLoaded = true; }); },
         onAdFailedToLoad: (ad, err) {
           ad.dispose();
-          // Handle the error. For debugging, you can print it.
-          if (kDebugMode) {
-            print('Error loading banner ad: $err');
-          }
+          if (kDebugMode) { print('Error loading banner ad: $err'); }
         },
       ),
     )..load();
@@ -103,7 +89,7 @@ class _HomePageState extends State<HomePage> {
 
   void _loadRewardedAd() {
     RewardedAd.load(
-      adUnitId: 'ca-app-pub-4968291987364468/1741821766', // Tumhara real Rewarded Ad Unit ID
+      adUnitId: 'ca-app-pub-4968291987364468/1741821766',
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
@@ -113,128 +99,239 @@ class _HomePageState extends State<HomePage> {
           });
         },
         onAdFailedToLoad: (err) {
-          if (kDebugMode) {
-            print('Error loading rewarded ad: $err');
-          }
-          setState(() {
-            _isRewardedAdLoaded = false;
-          });
+          if (kDebugMode) { print('Error loading rewarded ad: $err'); }
+          setState(() { _isRewardedAdLoaded = false; });
+          Future.delayed(const Duration(seconds: 10), _loadRewardedAd);
         },
       ),
     );
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    final allApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: true, includeSystemApps: true, onlyAppsWithLaunchIntent: true);
+  // --- NAYI FUNCTION: Interstitial Ad Load Karna ---
+  void _loadInterstitialAd() {
+    // TODO: Isko apne real AdMob Interstitial ID se badal dena
+    String adUnitId = 'ca-app-pub-3940256099942544/1033173712'; // Google Test ID
 
-    final foundApps = allApps.where((app) => _targetPackageNames.contains(app.packageName)).toList();
+    InterstitialAd.load(
+      adUnitId: adUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          setState(() {
+            _interstitialAd = ad;
+          });
+        },
+        onAdFailedToLoad: (err) {
+          if (kDebugMode) { print('Error loading interstitial ad: $err'); }
+          // Fail hone par try karo
+          Future.delayed(const Duration(seconds: 10), _loadInterstitialAd);
+        }
+      )
+    );
+  }
+
+
+  void _showRewardAdForTime(BuildContext context) {
+    if (_rewardedAd != null) {
+      _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) { ad.dispose(); _loadRewardedAd(); },
+        onAdFailedToShowFullScreenContent: (ad, err) { ad.dispose(); _loadRewardedAd(); }
+      );
+      _rewardedAd!.show( onUserEarnedReward: (ad, reward) {
+        _addBlockerTime(context, const Duration(minutes: 15));
+      });
+      _rewardedAd = null;
+      _isRewardedAdLoaded = false;
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Ad not ready yet. Try again.')));
+      }
+      if (!_isRewardedAdLoaded) _loadRewardedAd();
+    }
+  }
+
+  // --- NAYA LOGIC: Stop karne ke liye koi bhi Ad dikhao ---
+  void _showAdToStop(BuildContext context) {
+    // 1. Rewarded Ad ko Priority do
+    if (_rewardedAd != null) {
+       _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) { ad.dispose(); _loadRewardedAd(); },
+        onAdFailedToShowFullScreenContent: (ad, err) { ad.dispose(); _loadRewardedAd(); }
+      );
+      _rewardedAd!.show( onUserEarnedReward: (ad, reward) {
+        _stopBlocking(context: context); // Reward mila, stop karo
+      });
+      _rewardedAd = null;
+      _isRewardedAdLoaded = false;
+    }
+    // 2. Agar Rewarded nahi hai, to Interstitial check karo
+    else if (_interstitialAd != null) {
+      _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) {
+          ad.dispose();
+          _loadInterstitialAd(); // Naya load karo
+          _stopBlocking(context: context); // Ad band hone ke baad stop karo
+        },
+        onAdFailedToShowFullScreenContent: (ad, err) {
+          ad.dispose();
+          _loadInterstitialAd();
+          _stopBlocking(context: context); // Fail hua to bhi stop kar do
+        }
+      );
+      _interstitialAd!.show();
+      _interstitialAd = null;
+    }
+    // 3. Agar koi bhi ad nahi hai
+    else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('No Ad available. Stopping session.'), backgroundColor: Colors.grey)
+        );
+      }
+      _stopBlocking(context: context); // Free me stop kar do
+      // Dono ko phirse load karne ki koshish karo
+      _loadRewardedAd();
+      _loadInterstitialAd();
+    }
+  }
+
+  Future<void> _addBlockerTime(BuildContext context, Duration durationToAdd) async {
+    if (!_isBlockingActive) return;
+    setState(() {
+      _countdownDuration += durationToAdd;
+    });
 
     final blockerBox = Hive.box('blockerState');
-    final savedBlockedApps = blockerBox.get('selected_blocked_apps');
+    await blockerBox.put('blocker_end_time_millis', DateTime.now().add(_countdownDuration).millisecondsSinceEpoch);
+    await blockerBox.put('total_block_duration_seconds', _countdownDuration.inSeconds);
 
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('+15 minutes added!'), backgroundColor: Colors.green));
+    }
+  }
+
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    final blockerBox = Hive.box('blockerState');
+    final savedBlockedApps = blockerBox.get('quick_block_apps');
     setState(() {
-      _distractiveApps = foundApps;
-      _selectedBlockedApps = (savedBlockedApps as List?)?.cast<String>().toSet() ?? {};
+      _quickBlockApps = (savedBlockedApps as List?)?.cast<String>().toSet() ?? {};
       _isLoading = false;
     });
   }
 
-  // --- App Selection Logic ---
-  Future<void> _toggleAppSelection(String packageName, bool isSelected) async {
-    setState(() {
-      if (isSelected) {
-        _selectedBlockedApps.add(packageName);
-      } else {
-        _selectedBlockedApps.remove(packageName);
-      }
-    });
-    final blockerBox = Hive.box('blockerState');
-    await blockerBox.put('selected_blocked_apps', _selectedBlockedApps.toList());
+  Future<void> _showAppSelectionPage() async {
+    final selectedApps = await Navigator.push<List<String>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AppSelectionPage(
+          previouslySelectedApps: _quickBlockApps.toList(),
+        ),
+      ),
+    );
+    if (selectedApps != null) {
+      setState(() { _quickBlockApps = selectedApps.toSet(); });
+      final blockerBox = Hive.box('blockerState');
+      await blockerBox.put('quick_block_apps', _quickBlockApps.toList());
+    }
   }
 
-  // --- Blocker Activation & Timer Logic ---
-  Future<void> _startBlocking(Duration duration) async {
-    if (_isBlockingActive) return;
+  void _updateSelectedDuration(Duration d) {
+    setState(() {
+      _selectedDuration = d;
+    });
+  }
 
-    debugPrint("HomePage: _startBlocking called.");
+  Future<void> _showCustomTimePicker() async {
+    final selectedTime = await showDialog<TimeOfDay>(
+      context: context,
+      builder: (BuildContext context) {
+        return _CustomTimeSelectorDialog(initialTime: TimeOfDay.now());
+      },
+    );
 
-    // --- Permission Check ---
-    final hasOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
-    final hasAccessibilityPerm = await NativeBlocker.isAccessibilityServiceEnabled();
-    debugPrint("HomePage: Overlay permission granted: $hasOverlayPerm");
-    debugPrint("HomePage: Accessibility permission granted: $hasAccessibilityPerm");
-    if ((!hasOverlayPerm || !hasAccessibilityPerm) && mounted) {
-      await _showPermissionDialog();
-      // After dialog, re-check if permission was granted
-      final recheckOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
-      final recheckAccessibilityPerm = await NativeBlocker.isAccessibilityServiceEnabled();
-      if (!recheckOverlayPerm || !recheckAccessibilityPerm) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Overlay or Accessibility permission not granted. Blocker cannot activate.'), backgroundColor: Colors.red),
-        );
-        debugPrint("HomePage: Permissions still not granted after request.");
-        return;
+    if (selectedTime != null) {
+      final duration = Duration(hours: selectedTime.hour, minutes: selectedTime.minute);
+      if (duration.inSeconds > 0) {
+        _updateSelectedDuration(duration);
       }
     }
+  }
 
-    if (_selectedBlockedApps.isEmpty) {
+  Future<void> _startBlocking(BuildContext context) async {
+    if (_isBlockingActive) return;
+
+    if (_selectedDuration.inSeconds <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select apps to block first.'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Please select a duration first.'), backgroundColor: Colors.orange),
       );
-      debugPrint("HomePage: No apps selected for blocking.");
       return;
     }
 
-    debugPrint("HomePage: Calling BlockerService.updateNativeBlocker");
-    BlockerService.updateNativeBlocker();
-    setState(() {
-      _countdownDuration = duration;
-      _isBlockingActive = true;
-    });
+    final hasOverlayPerm = await NativeBlocker.isOverlayPermissionGranted();
+    final hasAccessibilityPerm = await NativeBlocker.isAccessibilityServiceEnabled();
+    if ((!hasOverlayPerm || !hasAccessibilityPerm) && mounted) {
+      await _showPermissionDialog();
+      return;
+    }
+
+    if (_quickBlockApps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select apps to block first.'), backgroundColor: Colors.orange),
+      );
+      Future.delayed(const Duration(milliseconds: 500), _showAppSelectionPage);
+      return;
+    }
 
     final blockerBox = Hive.box('blockerState');
+    await blockerBox.put('selected_blocked_apps', _quickBlockApps.toList());
+    BlockerService.updateNativeBlocker();
+
+    setState(() {
+      _countdownDuration = _selectedDuration;
+      _isBlockingActive = true;
+      _activeFocusMode = _selectedQuickMode;
+      _selectedDuration = Duration.zero;
+    });
+
     await blockerBox.put('is_blocking_active', true);
-    await blockerBox.put('blocker_end_time_millis', DateTime.now().add(duration).millisecondsSinceEpoch);
-    await blockerBox.put('total_block_duration_seconds', duration.inSeconds); // Add this line
-    debugPrint("HomePage: Blocker state saved to Hive.");
+    await blockerBox.put('blocker_end_time_millis', DateTime.now().add(_countdownDuration).millisecondsSinceEpoch);
+    await blockerBox.put('total_block_duration_seconds', _countdownDuration.inSeconds);
+    await blockerBox.put('focus_mode', _activeFocusMode);
 
     _startCountdownTimer();
-
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Blocker activated!'), backgroundColor: Colors.green));
-    debugPrint("HomePage: Blocker activated successfully.");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Focus activated!'), backgroundColor: Colors.green));
+    }
   }
-  
 
-  void _stopBlocking() {
+  void _stopBlocking({BuildContext? context}) {
     if (!_isBlockingActive) return;
-
     _countdownTimer?.cancel();
     BlockerService.updateNativeBlocker();
     setState(() {
       _countdownDuration = Duration.zero;
       _isBlockingActive = false;
+      _activeFocusMode = 0;
     });
-
     final blockerBox = Hive.box('blockerState');
     blockerBox.delete('is_blocking_active');
     blockerBox.delete('blocker_end_time_millis');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Blocker deactivated.'), backgroundColor: Colors.red));
+    blockerBox.delete('focus_mode');
+    if (context != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Blocker deactivated.'), backgroundColor: Colors.red));
+    }
   }
 
   void _startCountdownTimer() {
-    if (kDebugMode) {
-      print('[_startCountdownTimer] Timer started with duration: $_countdownDuration');
-    }
+    if (_countdownDuration.inDays > 900) return;
+
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
+      if (!mounted) { timer.cancel(); return; }
       if (_countdownDuration.inSeconds <= 0) {
         _stopBlocking();
       } else {
@@ -250,257 +347,892 @@ class _HomePageState extends State<HomePage> {
     final savedIsBlockingActive = blockerBox.get('is_blocking_active') ?? false;
     final savedEndTimeMillis = blockerBox.get('blocker_end_time_millis');
 
-    if (kDebugMode) {
-      print('[_loadBlockingState] savedIsBlockingActive: $savedIsBlockingActive');
-      print('[_loadBlockingState] savedEndTimeMillis: $savedEndTimeMillis');
-    }
-
     if (savedIsBlockingActive && savedEndTimeMillis != null) {
       final savedEndTime = DateTime.fromMillisecondsSinceEpoch(savedEndTimeMillis);
       final remainingDuration = savedEndTime.difference(DateTime.now());
-
-      if (kDebugMode) {
-        print('[_loadBlockingState] savedEndTime: $savedEndTime');
-        print('[_loadBlockingState] remainingDuration: $remainingDuration');
-      }
-
       if (remainingDuration.isNegative) {
-        // Blocker expired while app was closed
-        if (kDebugMode) {
-          print('[_loadBlockingState] Blocker expired, stopping.');
-        }
         _stopBlocking();
       } else {
         setState(() {
           _countdownDuration = remainingDuration;
           _isBlockingActive = true;
+          _activeFocusMode = blockerBox.get('focus_mode') ?? 0;
         });
-        if (kDebugMode) {
-          print('[_loadBlockingState] Resuming blocker with duration: $_countdownDuration');
-        }
 
-        _startCountdownTimer(); // Start the timer with the loaded duration
+        if (_countdownDuration.inDays < 900) {
+          _startCountdownTimer();
+        }
       }
     }
   }
 
-  // --- Permission Dialog ---
   Future<void> _showPermissionDialog() async {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Permissions Required'),
-        content: const Text('To block apps, please grant Overlay and Accessibility permissions.'),
+        backgroundColor: const Color(0xFF1A1C2A),
+        title: Text('Permissions Required', style: GoogleFonts.poppins(color: Colors.white)),
+        content: Text('To block apps, please grant Overlay and Accessibility permissions.', style: GoogleFonts.poppins(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Later')),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: Text('Later', style: GoogleFonts.poppins(color: Colors.white70))),
           TextButton(
               onPressed: () {
                 NativeBlocker.requestOverlayPermission();
                 NativeBlocker.openAccessibilitySettings();
                 Navigator.of(context).pop();
               },
-              child: const Text('Grant')),
+              child: Text('Grant', style: GoogleFonts.poppins(color: _activeColor, fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
-  // --- Time Setting Dialog ---
-  Future<void> _showTimeSettingDialog() async {
-    int selectedHours = 0;
-    int selectedDays = 0;
-    DateTime? startDate;
-    DateTime? endDate;
+  @override
+  Widget build(BuildContext context) {
+    final durationToDisplay = _isBlockingActive ? _countdownDuration : _selectedDuration;
 
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Set Blocking Duration'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Text('Block for Hours:'),
-                NumberPicker(
-                  value: selectedHours,
-                  minValue: 0,
-                  maxValue: 24,
-                  onChanged: (value) => selectedHours = value,
-                ),
-                const SizedBox(height: 20),
-                const Text('Block for Days:'),
-                NumberPicker(
-                  value: selectedDays,
-                  minValue: 0,
-                  maxValue: 30,
-                  onChanged: (value) => selectedDays = value,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () async {
-                    final picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) {
-                      startDate = picked.start;
-                      endDate = picked.end;
-                      // Optionally update UI to show selected range
-                    }
-                  },
-                  child: const Text('Select Date Range'),
-                ),
-                if (startDate != null && endDate != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text('${startDate!.toLocal().toString().split(' ')[0]} to ${endDate!.toLocal().toString().split(' ')[0]}'),
-                  ),
-              ],
-            ),
+    String formattedCountdown;
+    final days = durationToDisplay.inDays;
+    final hours = durationToDisplay.inHours.remainder(24);
+    final minutes = durationToDisplay.inMinutes.remainder(60);
+    final seconds = durationToDisplay.inSeconds.remainder(60);
+
+    if (days > 900) {
+      formattedCountdown = "DEEP FOCUS";
+    } else if (days > 0) {
+      formattedCountdown = "${days}d ${hours.toString().padLeft(2, '0')}h";
+    } else if (hours > 0) {
+      formattedCountdown = "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    } else {
+      formattedCountdown = "00:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    }
+
+    if (_isBlockingActive && _countdownDuration.inDays > 900) {
+      formattedCountdown = "DEEP FOCUS";
+    }
+
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF030A24), Color(0xFF00020C)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text('Start Focus', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          bottom: _isBlockingActive ? null : TabBar(
+            controller: _tabController,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16),
+            unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            tabs: [
+              Tab(
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                  Icon(Icons.timer_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text('Quick Focus'),
+                ]),
+              ),
+              Tab(
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                  Icon(Icons.all_inclusive_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text('Deep Focus'),
+                ]),
+              ),
+            ],
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () { Navigator.of(context).pop(); },
-            ),
-            TextButton(
-              child: const Text('Set'),
-              onPressed: () async {
-                Duration duration = Duration.zero;
-                if (selectedHours > 0) {
-                  duration += Duration(hours: selectedHours);
-                }
-                if (selectedDays > 0) {
-                  duration += Duration(days: selectedDays);
-                }
-                if (startDate != null && endDate != null) {
-                  duration = endDate!.difference(startDate!) + const Duration(days: 1); // Include end day
-                }
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _buildTimerDisplay(formattedCountdown),
 
-                if (duration.inSeconds > 0) {
-                  await _startBlocking(duration);
-                }
-                if(context.mounted) Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+                  Expanded(
+                    child: _isBlockingActive
+                        ? _buildBlockingActiveView()
+                        : TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildQuickFocusView(),
+                              _buildDeepFocusView(),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+        bottomNavigationBar: (_isBannerAdLoaded && _bannerAd != null)
+          ? Container(
+              color: Colors.black,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : null,
+      ),
     );
   }
 
-  
+  Widget _buildQuickFocusView() {
+    return Builder(builder: (context) { // Use Builder to get context under Scaffold
+      return SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height -
+                (Scaffold.of(context).appBarMaxHeight ?? 0) -
+                (MediaQuery.of(context).padding.top +
+                    MediaQuery.of(context).padding.bottom) -
+                200 -
+                (_isBannerAdLoaded ? 50 : 0),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  _buildSectionHeader('1. Select Duration', _quickFocusColor),
+                  _buildTimePresetButtons(),
+                  const SizedBox(height: 24),
+                  _buildSectionHeader('2. Select Apps', _quickFocusColor),
+                  _buildAppSelectorCard(_quickFocusColor),
+                ],
+              ),
+              Column(
+                children: [
+                  _buildSectionHeader('3. Select Mode', _quickFocusColor),
+                  _buildModeSelector(),
+                  const SizedBox(height: 24),
+                  _buildStartButton(),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
 
-  // --- Time Setting Dialog ---
- 
-  // --- UI Build ---
-  @override
-  Widget build(BuildContext context) {
-    final days = _countdownDuration.inDays.toString().padLeft(2, '0');
-    final hours = (_countdownDuration.inHours % 24).toString().padLeft(2, '0');
-    final minutes = (_countdownDuration.inMinutes % 60).toString().padLeft(2, '0');
-    final seconds = (_countdownDuration.inSeconds % 60).toString().padLeft(2, '0');
-    final formattedCountdown = '$days:$hours:$minutes:$seconds';
+  Widget _buildModeSelector() {
+    return Row(
+      children: [
+        _buildModeOption(
+          'Normal',
+          Icons.lock_open_rounded,
+          _normalColor,
+          _selectedQuickMode == 0,
+          () => setState(() => _selectedQuickMode = 0),
+        ),
+        const SizedBox(width: 16),
+        _buildModeOption(
+          'Strict',
+          Icons.lock_rounded,
+          _strictColor,
+          _selectedQuickMode == 1,
+          () => setState(() => _selectedQuickMode = 1),
+        ),
+      ],
+    );
+  }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Flow App'), centerTitle: true),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Countdown Timer Display
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12.0),
+  Widget _buildModeOption(String title, IconData icon, Color color, bool isSelected, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.3) : Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? color : Colors.white.withOpacity(0.2),
+              width: isSelected ? 2 : 1,
+            )
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildDeepFocusView() {
+     return Padding(
+       padding: const EdgeInsets.all(20),
+       child: Column(
+         crossAxisAlignment: CrossAxisAlignment.start,
+         children: [
+          const SizedBox(height: 20),
+           _buildSectionHeader('1. Select Apps', _deepFocusColor),
+           _buildAppSelectorCard(_deepFocusColor),
+
+           const Spacer(),
+
+           _buildSectionHeader('2. Start Unlimited Session', _deepFocusColor),
+
+           Builder(builder: (context){ // Use Builder to get context for _startBlocking
+             return GestureDetector(
+               onTap: () {
+                 setState(() {
+                   _selectedQuickMode = 1;
+                   _selectedDuration = _unlimitedDuration;
+                 });
+                 _startBlocking(context);
+               },
+               child: ClipRRect(
+                 borderRadius: BorderRadius.circular(24),
+                 child: BackdropFilter(
+                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                   child: Container(
+                     width: double.infinity,
+                     height: 180,
+                     decoration: BoxDecoration(
+                       gradient: LinearGradient(
+                         colors: [_deepFocusColor.withOpacity(0.4), _deepFocusColor.withOpacity(0.2)],
+                         begin: Alignment.topLeft,
+                         end: Alignment.bottomRight,
+                       ),
+                       borderRadius: BorderRadius.circular(24),
+                       border: Border.all(color: _deepFocusColor, width: 2),
+                     ),
+                     child: Column(
+                       mainAxisAlignment: MainAxisAlignment.center,
+                       children: [
+                         Icon(Icons.all_inclusive_rounded, color: Colors.white, size: 72),
+                         const SizedBox(height: 12),
+                         Text(
+                           'Start Deep Focus',
+                           style: GoogleFonts.poppins(
+                             color: Colors.white,
+                             fontSize: 20,
+                             fontWeight: FontWeight.w600,
+                           ),
+                         ),
+                         Text(
+                           '(Strict Mode: Watch Ad to Stop)',
+                           style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
+                         ),
+                       ],
+                     ),
+                   ),
+                 ),
+               ),
+             );
+           }),
+           const Spacer(),
+         ],
+       ),
+     );
+  }
+
+
+  Widget _buildBlockingActiveView() {
+    bool isDeepFocus = _countdownDuration.inDays > 900;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Spacer(),
+
+        if (!isDeepFocus) ...[
+          _buildRewardButton(),
+          const SizedBox(height: 16),
+        ],
+
+        if (_activeFocusMode == 0)
+          _buildStopButton()
+        else
+          _buildStopWithAdButton(),
+
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildStopWithAdButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Builder(builder: (context) { // Use Builder to get context for _showAdToStop
+        return GestureDetector(
+          onTap: () => _showAdToStop(context),
+          child: Container(
+            width: double.infinity,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.amber.withOpacity(0.2),
+              border: Border.all(color: Colors.amber),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.lock_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Stop (Watch Ad)',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                    child: Text(formattedCountdown, style: GoogleFonts.robotoMono(fontSize: 42, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildRewardButton() {
+    bool canShowAd = _isRewardedAdLoaded;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: canShowAd ? 1.0 : 0.5,
+        child: Builder(builder: (context) { // Use Builder to get context for _showRewardAdForTime
+          return GestureDetector(
+            onTap: canShowAd ? () => _showRewardAdForTime(context) : null,
+            child: Container(
+              width: double.infinity,
+              height: 50,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.green.withOpacity(0.2),
+                border: Border.all(color: Colors.green),
+              ),
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.slow_motion_video_rounded,
+                        color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Watch Ad to Add 15 Min',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildTimerDisplay(String formattedCountdown) {
+    bool isDeepFocus = _isBlockingActive && _countdownDuration.inDays > 900;
+    bool isTimerSet = _selectedDuration > Duration.zero;
+
+    // --- ACTIVE STATE ---
+    if (_isBlockingActive) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 32.0),
+              decoration: BoxDecoration(
+                color: isDeepFocus ? _deepFocusColor.withOpacity(0.2) : _activeColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: isDeepFocus ? _deepFocusColor : _activeColor, width: 2),
+              ),
+              child: Column(
+                children: [
+                   Text(
+                    isDeepFocus ? 'DEEP FOCUS ACTIVE' : (_activeFocusMode == 1 ? 'STRICT MODE ACTIVE' : 'FOCUS IS ACTIVE'),
+                    style: GoogleFonts.poppins(fontSize: 12, color: isDeepFocus ? _deepFocusColor : (_activeFocusMode == 1 ? Colors.amber : Colors.white), fontWeight: FontWeight.w600, letterSpacing: 2),
+                  ),
+                  Text(
+                    isDeepFocus ? "∞" : formattedCountdown,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 56,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // --- INACTIVE STATE ---
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 32.0),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: isTimerSet ? _quickFocusColor : Colors.white.withOpacity(0.2)),
+            ),
+            child: Column(
+              children: [
+                 Text(
+                  isTimerSet ? 'SESSION PREPARED' : 'SELECT DURATION',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: isTimerSet ? _quickFocusColor : Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2
                   ),
                 ),
-                const Divider(thickness: 1),
-                // App List Section
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('Select Distractive Apps to Block', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: _distractiveApps.isEmpty
-                      ? const Center(child: Text('No specified distractive apps found.'))
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          itemCount: _distractiveApps.length,
-                          itemBuilder: (context, index) {
-                            final app = _distractiveApps[index];
-                            final isSelected = _selectedBlockedApps.contains(app.packageName);
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 5.0),
-                              elevation: _isBlockingActive ? 0 : 2, // Reduce elevation when blocking
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-                              color: _isBlockingActive && isSelected ? Theme.of(context).colorScheme.errorContainer : null,
-                              child: ListTile(
-                                leading: app is ApplicationWithIcon ? Image.memory(app.icon, width: 40) : const Icon(Icons.apps, size: 40),
-                                title: Text(app.appName),
-                                trailing: Switch(
-                                  value: isSelected,
-                                  onChanged: _isBlockingActive ? null : (value) => _toggleAppSelection(app.packageName, value),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                // Activate/Stop Blocker Button
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: widget.isSelectionMode
-                      ? ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context, {'selectedApps': _selectedBlockedApps.toList()});
-                          },
-                          icon: const Icon(Icons.check_circle_outline),
-                          label: const Text('Select Apps'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                        )
-                      : _isBlockingActive
-                          ? ElevatedButton.icon(
-                              onPressed: _stopBlocking,
-                              icon: const Icon(Icons.stop_circle_outlined),
-                              label: const Text('Stop Blocker'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                                foregroundColor: Theme.of(context).colorScheme.onError,
-                                minimumSize: const Size(double.infinity, 50),
-                              ),
-                            )
-                          : ElevatedButton.icon(
-                              onPressed: _showTimeSettingDialog,
-                              icon: const Icon(Icons.lock_open),
-                              label: const Text('Activate Blocker'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                minimumSize: const Size(double.infinity, 50),
-                              ),
-                            ),
-                ),
-                // Banner Ad
-                if (_isBannerAdLoaded && _bannerAd != null)
-                  SizedBox(
-                    width: _bannerAd!.size.width.toDouble(),
-                    height: _bannerAd!.size.height.toDouble(),
-                    child: AdWidget(ad: _bannerAd!),
+                Text(
+                  isTimerSet ? formattedCountdown : "00:00:00",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 56,
+                    fontWeight: FontWeight.bold,
+                    color: isTimerSet ? Colors.white : Colors.white54,
                   ),
+                ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, Color accentColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: accentColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimePresetButtons() {
+    final presets = [
+      {'label': '30 min', 'duration': const Duration(minutes: 30)},
+      {'label': '1 Hour', 'duration': const Duration(hours: 1)},
+      {'label': '2 Hours', 'duration': const Duration(hours: 2)},
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 0.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          ...presets.map((preset) {
+            final isSelected = _selectedDuration == preset['duration'];
+            return _buildTimeChip(
+              preset['label'] as String,
+              isSelected,
+              () => _updateSelectedDuration(preset['duration'] as Duration),
+              _quickFocusColor,
+            );
+          }),
+          _buildTimeChip(
+            'Custom',
+            false,
+            _showCustomTimePicker,
+            _quickFocusColor,
+            icon: Icons.edit,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeChip(String label, bool isSelected, VoidCallback onTap, Color accentColor, {IconData? icon}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? accentColor.withOpacity(0.3) : const Color(0xFF1A1C2A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? accentColor : accentColor.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
+          )
+        ),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: accentColor, size: 18),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppSelectorCard(Color accentColor) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 0.0),
+      child: GestureDetector(
+        onTap: _showAppSelectionPage,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: accentColor.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.apps_rounded, color: Colors.white, size: 28),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Apps to Block',
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        Text(
+                          '${_quickBlockApps.length} apps selected',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStartButton() {
+    final Color buttonColor = _selectedQuickMode == 0 ? _normalColor : _strictColor;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0.0),
+      child: Builder(builder: (context) { // Use Builder to get context for _startBlocking
+        return GestureDetector(
+          onTap: () => _startBlocking(context),
+          child: Container(
+            width: double.infinity,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [buttonColor, buttonColor.withOpacity(0.7)],
+                begin: Alignment.centerLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: buttonColor.withOpacity(0.5),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Start Focus (${_selectedQuickMode == 0 ? "Normal" : "Strict"})',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildStopButton() {
+     return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Builder(builder: (context) { // Use Builder to get context for _stopBlocking
+        return GestureDetector(
+          onTap: () => _stopBlocking(context: context),
+          child: Container(
+            width: double.infinity,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Colors.redAccent, Colors.red],
+                begin: Alignment.centerLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withOpacity(0.5),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.stop_circle_outlined, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Stop Focus',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// --- Custom Time Selector Dialog ---
+
+class _CustomTimeSelectorDialog extends StatefulWidget {
+  final TimeOfDay initialTime;
+
+  const _CustomTimeSelectorDialog({required this.initialTime});
+
+  @override
+  _CustomTimeSelectorDialogState createState() => _CustomTimeSelectorDialogState();
+}
+
+class _CustomTimeSelectorDialogState extends State<_CustomTimeSelectorDialog> {
+  late int _selectedHour; 
+  late int _selectedMinute;
+
+  late FixedExtentScrollController _hourController;
+  late FixedExtentScrollController _minuteController;
+  
+  @override
+  void initState() {
+    super.initState();
+    _selectedHour = 0; 
+    _selectedMinute = 30; 
+
+    _hourController = FixedExtentScrollController(initialItem: _selectedHour);
+    _minuteController = FixedExtentScrollController(initialItem: _selectedMinute);
+  }
+  
+  @override
+  void dispose() {
+    _hourController.dispose();
+    _minuteController.dispose();
+    super.dispose();
+  }
+
+  void _onSave() {
+    final selectedTime = TimeOfDay(hour: _selectedHour, minute: _selectedMinute);
+    Navigator.of(context).pop(selectedTime);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1C2A).withOpacity(0.8),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Select Duration', 
+                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSpinner(
+                      controller: _hourController,
+                      itemCount: 24, 
+                      onChanged: (index) { setState(() { _selectedHour = index; }); },
+                      labels: List.generate(24, (i) => i.toString().padLeft(2, '0')),
+                      suffix: "hr", 
+                    ),
+                    Text(":", style: GoogleFonts.poppins(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600)),
+                    _buildSpinner(
+                      controller: _minuteController,
+                      itemCount: 60, 
+                      onChanged: (index) { setState(() { _selectedMinute = index; }); },
+                      labels: List.generate(60, (i) => i.toString().padLeft(2, '0')),
+                      suffix: "min", 
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: _onSave,
+                        child: Text(
+                          'OK',
+                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildSpinner({
+    required FixedExtentScrollController controller,
+    required int itemCount,
+    required ValueChanged<int> onChanged,
+    required List<String> labels,
+    String? suffix,
+  }) {
+    return Container(
+      width: 90, 
+      height: 120,
+      child: ListWheelScrollView.useDelegate(
+        controller: controller,
+        itemExtent: 50,
+        perspective: 0.005,
+        diameterRatio: 1.2,
+        physics: const FixedExtentScrollPhysics(),
+        onSelectedItemChanged: onChanged,
+        childDelegate: ListWheelChildBuilderDelegate(
+          childCount: itemCount,
+          builder: (context, index) {
+            final label = labels[index];
+            final bool isSelected = (controller.hasClients && controller.selectedItem == index);
+            
+            return Center(
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 150),
+                style: GoogleFonts.poppins(
+                  fontSize: isSelected ? 28 : 22,
+                  color: isSelected ? Colors.white : Colors.white54,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+                child: Text('$label ${suffix ?? ''}'), 
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

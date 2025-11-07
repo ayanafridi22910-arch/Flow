@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:math';
 import 'package:flow/blocker_service.dart';
 import 'package:flow/screens/schedule_edit_page.dart';
@@ -12,8 +13,6 @@ import 'package:flow/native_blocker.dart';
 import 'package:flow/screens/permission_page_redesigned.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_apps/device_apps.dart';
-import 'dart:ui';
-
 import 'dart:ui';
 
 // --- Custom Widgets for Zen Focus Theme ---
@@ -159,6 +158,8 @@ class FirstPage extends StatefulWidget {
 }
 
 class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
   static const MethodChannel _channel = MethodChannel('app.blocker/channel');
 
   Timer? _mainTimer;
@@ -203,11 +204,12 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     );
 
     _animationController.forward();
+    _loadBannerAd();
   }
 
   Future<void> _initializeAll() async {
     await Hive.openBox('blockerState');
-    await Hive.openBox('focusProfiles'); // New box for profiles
+    await Hive.openBox('focusProfiles'); 
     await _checkAllCorePermissions();
 
     if (mounted) {
@@ -227,6 +229,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     _mainTimer?.cancel();
     _scrollController.dispose();
     _animationController.dispose();
+    _bannerAd?.dispose();
     super.dispose();
   }
 
@@ -236,6 +239,24 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     if (state == AppLifecycleState.resumed) {
       _initializeAll();
     }
+  }
+
+  void _loadBannerAd() {
+    _bannerAd = BannerAd(
+      adUnitId: 'ca-app-pub-3940256099942544/6300978111', // Test ID
+      request: const AdRequest(),
+      size: AdSize.banner,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (ad, err) {
+          ad.dispose();
+        },
+      ),
+    )..load();
   }
 
   void _startMainTimer() {
@@ -291,7 +312,8 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         _stopFocusSession();
       } else {
         final savedBlockedApps = blockerBox.get('selected_blocked_apps');
-        final savedTotalDurationSeconds = blockerBox.get('current_session_total_duration_seconds');
+        // --- FIX: Key ka naam update kiya ---
+        final savedTotalDurationSeconds = blockerBox.get('total_block_duration_seconds');
         if (mounted) {
           setState(() {
             _focusCountdown = remainingDuration;
@@ -322,7 +344,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         'icon': 'work',
         'startTime': '09:00',
         'endTime': '17:00',
-        'days': [true, true, true, true, true, false, false], // Mon-Fri
+        'days': [true, true, true, true, true, false, false], 
         'apps': <String>['com.google.android.gm', 'com.google.android.apps.messaging'],
         'isEnabled': true,
       });
@@ -374,32 +396,8 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     }
   }
 
-  Future<void> _startFocusSession(List<String> appsToBlock, Duration duration) async {
-    if (appsToBlock.isEmpty || duration.inSeconds <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select apps and a valid duration.'), backgroundColor: Colors.orange),
-      );
-      return;
-    }
-
-    final blockerBox = Hive.box('blockerState');
-    final endTime = DateTime.now().add(duration);
-    await blockerBox.put('is_blocking_active', true);
-    await blockerBox.put('blocker_end_time_millis', endTime.millisecondsSinceEpoch);
-    await blockerBox.put('selected_blocked_apps', appsToBlock.toList());
-    await blockerBox.put('current_session_total_duration_seconds', duration.inSeconds);
-
-    if (mounted) {
-      setState(() {
-        _isFocusActive = true;
-        _focusCountdown = duration;
-        _focusSessionApps = appsToBlock.toSet();
-        _currentFocusSessionTotalDuration = duration;
-      });
-      _loadFocusSessionAppIcons(_focusSessionApps.toList());
-      BlockerService.updateNativeBlocker();
-    }
-  }
+  // --- FIX: Ye function ab _buildIdleStateDisplay me use nahi ho raha ---
+  // Future<void> _startFocusSession(List<String> appsToBlock, Duration duration) async { ... }
 
   Future<void> _stopFocusSession() async {
     if (!_isFocusActive) return;
@@ -408,7 +406,9 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
     await blockerBox.delete('is_blocking_active');
     await blockerBox.delete('blocker_end_time_millis');
     await blockerBox.delete('selected_blocked_apps');
-    await blockerBox.delete('current_session_total_duration_seconds');
+    // --- FIX: Key ka naam update kiya ---
+    await blockerBox.delete('total_block_duration_seconds');
+    await blockerBox.delete('focus_mode');
 
     if (mounted) {
       setState(() {
@@ -432,9 +432,8 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         elevation: 0,
         title: Text('Flow', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
         actions: [
-          _buildAppBarMetric(Icons.local_fire_department, 'Streak: $_streakCount', Colors.orange.shade400),
-          const SizedBox(width: 10),
-          _buildAppBarMetric(Icons.hourglass_empty, 'Focus: ${_formatTotalFocusDuration(_totalFocusDuration)}', Colors.blue.shade400),
+          _buildAppBarMetric(Icons.local_fire_department, '$_streakCount', Colors.orange.shade400),
+          const SizedBox(width: 16), // Padding
         ],
       ),
       body: Stack(
@@ -452,12 +451,11 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
                     position: _slideAnimation,
                     child: Column(
                       children: [
-                        // Removed SizedBox(height: 40) here as AppBar is back
                         if (_isFocusActive)
                           _buildActiveSessionDisplay()
                         else
                           _buildIdleStateDisplay(),
-                        const SizedBox(height: 30), // Spacing between active/idle and profiles
+                        const SizedBox(height: 30),
                         _buildFocusSchedulesSection(),
                       ],
                     ),
@@ -470,38 +468,45 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
       ),
       floatingActionButton: BouncyButton(
         onTap: () async {
-          // Navigate to add new profile
           await Navigator.push(context, MaterialPageRoute(builder: (context) => const ScheduleEditPage()));
-          _loadFocusSchedules(); // Reload profiles after editing/adding
+          _loadFocusSchedules();
         },
         child: FloatingActionButton(
-          onPressed: null, // Handled by BouncyButton
+          onPressed: null,
           backgroundColor: Colors.blueAccent.shade400,
           child: const Icon(Icons.add, color: Colors.white),
         ),
       ),
+      bottomNavigationBar: (_isBannerAdLoaded && _bannerAd != null)
+          ? Container(
+              color: Colors.black,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : null,
     );
   }
 
   Widget _buildAppBarMetric(IconData icon, String text, Color iconColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+        border: Border.all(color: iconColor.withOpacity(0.5), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: iconColor, size: 16),
-          const SizedBox(width: 4),
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(width: 8),
           Text(
             text,
             style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -539,7 +544,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
             countdownDuration: _focusCountdown,
             totalDuration: _currentFocusSessionTotalDuration,
             isActive: true,
-            size: 150, // Increased size
+            size: 150, 
           ),
           const SizedBox(height: 24),
           if (_focusSessionAppIconWidgets.isNotEmpty)
@@ -605,12 +610,10 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
         const SizedBox(height: 40),
         BouncyButton(
           onTap: () async {
-            final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
-            if (result != null && result is Map<String, dynamic>) {
-              final List<String> selectedApps = List<String>.from(result['selectedApps']);
-              final Duration duration = result['duration'] as Duration;
-              _startFocusSession(selectedApps, duration);
-            }
+            // --- FIX: YAHI HAI SCAFFOLD ERROR KA FIX ---
+            await Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+            // Jab user wapas aaye, to state reload karo
+            _loadFocusState();
           },
           child: Container(
             height: 60,
@@ -636,7 +639,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
                 const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
                 const SizedBox(width: 12),
                 Text(
-                  'Start Blocking',
+                  'Start Instant Focus', 
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 18,
@@ -684,6 +687,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
       time = '${_formatTime12Hour(rawStartTime)} - ${_formatTime12Hour(rawEndTime)}';
     }
     final List<String> apps = (profileData['apps'] as List?)?.cast<String>() ?? [];
+    final bool isEnabled = profileData['isEnabled'] ?? true; 
 
     return Container(
       margin: const EdgeInsets.only(bottom: 30),
@@ -726,6 +730,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
                       },
                       child: const Icon(Icons.delete, color: Colors.redAccent),
                     ),
+                    
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -803,7 +808,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
             child: Text(
               profileName[0].toUpperCase(),
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
+            ), // <-- FIX
           );
         } else {
           return const Icon(Icons.shield_moon, color: Colors.white, size: 28);
@@ -843,7 +848,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
       }
       return '$hour:$minuteStr $period';
     } catch (e) {
-      return time; // Return original time if parsing fails
+      return time; 
     }
   }
 
@@ -856,7 +861,7 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
   Future<void> _showDeleteConfirmationDialog(String profileId) async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // user must tap button!
+      barrierDismissible: false, 
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Delete Schedule'),
@@ -886,32 +891,9 @@ class _FirstPageState extends State<FirstPage> with WidgetsBindingObserver, Sing
       },
     );
   }
-}
+} 
 
-class CustomScrollPhysics extends ScrollPhysics {
-  const CustomScrollPhysics({ScrollPhysics? parent}) : super(parent: parent);
-
-  @override
-  CustomScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return CustomScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
-    final tolerance = toleranceFor(position);
-    if ((velocity.abs() < tolerance.velocity) ||
-        (velocity > 0.0 && position.pixels >= position.maxScrollExtent) ||
-        (velocity < 0.0 && position.pixels <= position.minScrollExtent)) {
-      return null;
-    }
-    return ClampingScrollSimulation(
-      position: position.pixels,
-      velocity: velocity,
-      friction: 0.005, // lower friction -> longer scroll
-      tolerance: tolerance,
-    );
-  }
-}
+// --- FIX: Classes ko file ke end me move kiya ---
 
 class BouncyButton extends StatefulWidget {
   final Widget child;
@@ -969,6 +951,31 @@ class _BouncyButtonState extends State<BouncyButton> with SingleTickerProviderSt
         scale: _scaleAnimation,
         child: widget.child,
       ),
+    );
+  }
+}
+
+class CustomScrollPhysics extends ScrollPhysics {
+  const CustomScrollPhysics({ScrollPhysics? parent}) : super(parent: parent);
+
+  @override
+  CustomScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return CustomScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
+    final tolerance = toleranceFor(position);
+    if ((velocity.abs() < tolerance.velocity) ||
+        (velocity > 0.0 && position.pixels >= position.maxScrollExtent) ||
+        (velocity < 0.0 && position.pixels <= position.minScrollExtent)) {
+      return null;
+    }
+    return ClampingScrollSimulation(
+      position: position.pixels,
+      velocity: velocity * 1.5, 
+      friction: 0.01, 
+      tolerance: tolerance,
     );
   }
 }
