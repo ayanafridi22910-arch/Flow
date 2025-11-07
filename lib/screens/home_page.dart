@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:flutter/material.dart'; // <-- FIX
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart'; 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flow/screens/app_selection_page.dart'; // <-- FIX
+import 'package:flow/screens/app_selection_page.dart'; 
 import 'dart:ui'; 
 
 import '../native_blocker.dart';
@@ -18,13 +19,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-
-  Duration _countdownDuration = Duration.zero;
-  Duration _selectedDuration = Duration.zero;
+  
+  Duration _countdownDuration = Duration.zero; 
+  Duration _selectedDuration = Duration.zero; 
   Timer? _countdownTimer;
   bool _isBlockingActive = false;
-
-  Set<String> _quickBlockApps = {};
+  
+  Set<String> _quickBlockApps = {}; 
   bool _isLoading = true;
 
   int _selectedQuickMode = 0; // 0: Normal, 1: Strict
@@ -34,13 +35,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   bool _isBannerAdLoaded = false;
   RewardedAd? _rewardedAd;
   bool _isRewardedAdLoaded = false;
-  // --- NAYA INTERSTITIAL AD ---
   InterstitialAd? _interstitialAd;
-
+  
   late TabController _tabController;
 
   static const Color _quickFocusColor = Colors.cyan;
-  static const Color _deepFocusColor = Color(0xFF8b5cf6);
+  static const Color _deepFocusColor = Color(0xFF8b5cf6); 
   static const Color _activeColor = Colors.blueAccent;
 
   static const Color _normalColor = Colors.green;
@@ -52,12 +52,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-
+    _tabController = TabController(length: 2, vsync: this); 
+    
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {
+          // Rebuild
+        });
+      }
+    });
+    
     _loadData();
     _loadBannerAd();
     _loadRewardedAd();
-    _loadInterstitialAd(); // <-- NAYA CALL
+    _loadInterstitialAd(); 
     _loadBlockingState();
   }
 
@@ -66,15 +74,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _countdownTimer?.cancel();
     _bannerAd?.dispose();
     _rewardedAd?.dispose();
-    _interstitialAd?.dispose(); // <-- NAYA
-    _tabController.dispose();
+    _interstitialAd?.dispose();
+    _tabController.dispose(); 
     super.dispose();
   }
 
-  // --- Ad Logic (Updated) ---
+  // --- Ad Logic ---
   void _loadBannerAd() {
     _bannerAd = BannerAd(
-      adUnitId: 'ca-app-pub-3940256099942544/6300978111',
+      adUnitId: 'ca-app-pub-3940256099942544/6300978111', // Test ID
       request: const AdRequest(),
       size: AdSize.banner,
       listener: BannerAdListener(
@@ -89,7 +97,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   void _loadRewardedAd() {
     RewardedAd.load(
-      adUnitId: 'ca-app-pub-4968291987364468/1741821766',
+      adUnitId: 'ca-app-pub-3940256099942544/5224354917', // Test ID
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
@@ -106,10 +114,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
     );
   }
-
-  // --- NAYI FUNCTION: Interstitial Ad Load Karna ---
+  
   void _loadInterstitialAd() {
-    // TODO: Isko apne real AdMob Interstitial ID se badal dena
     String adUnitId = 'ca-app-pub-3940256099942544/1033173712'; // Google Test ID
 
     InterstitialAd.load(
@@ -123,7 +129,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         },
         onAdFailedToLoad: (err) {
           if (kDebugMode) { print('Error loading interstitial ad: $err'); }
-          // Fail hone par try karo
           Future.delayed(const Duration(seconds: 10), _loadInterstitialAd);
         }
       )
@@ -140,56 +145,47 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _rewardedAd!.show( onUserEarnedReward: (ad, reward) {
         _addBlockerTime(context, const Duration(minutes: 15));
       });
-      _rewardedAd = null;
+      _rewardedAd = null; 
       _isRewardedAdLoaded = false;
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Ad not ready yet. Try again.')));
-      }
-      if (!_isRewardedAdLoaded) _loadRewardedAd();
+      ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Ad not ready yet. Try again.')));
+      if (!_isRewardedAdLoaded) _loadRewardedAd(); 
     }
   }
-
-  // --- NAYA LOGIC: Stop karne ke liye koi bhi Ad dikhao ---
+  
   void _showAdToStop(BuildContext context) {
-    // 1. Rewarded Ad ko Priority do
     if (_rewardedAd != null) {
        _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
         onAdDismissedFullScreenContent: (ad) { ad.dispose(); _loadRewardedAd(); },
         onAdFailedToShowFullScreenContent: (ad, err) { ad.dispose(); _loadRewardedAd(); }
       );
       _rewardedAd!.show( onUserEarnedReward: (ad, reward) {
-        _stopBlocking(context: context); // Reward mila, stop karo
+        _stopBlocking(context: context); 
       });
-      _rewardedAd = null;
+      _rewardedAd = null; 
       _isRewardedAdLoaded = false;
-    }
-    // 2. Agar Rewarded nahi hai, to Interstitial check karo
+    } 
     else if (_interstitialAd != null) {
       _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
         onAdDismissedFullScreenContent: (ad) {
           ad.dispose();
-          _loadInterstitialAd(); // Naya load karo
-          _stopBlocking(context: context); // Ad band hone ke baad stop karo
+          _loadInterstitialAd(); 
+          _stopBlocking(context: context); 
         },
         onAdFailedToShowFullScreenContent: (ad, err) {
           ad.dispose();
           _loadInterstitialAd();
-          _stopBlocking(context: context); // Fail hua to bhi stop kar do
+          _stopBlocking(context: context); 
         }
       );
       _interstitialAd!.show();
       _interstitialAd = null;
     }
-    // 3. Agar koi bhi ad nahi hai
     else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(content: Text('No Ad available. Stopping session.'), backgroundColor: Colors.grey)
-        );
-      }
-      _stopBlocking(context: context); // Free me stop kar do
-      // Dono ko phirse load karne ki koshish karo
+      ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('No Ad available. Stopping session.'), backgroundColor: Colors.grey)
+      );
+      _stopBlocking(context: context); 
       _loadRewardedAd();
       _loadInterstitialAd();
     }
@@ -200,12 +196,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     setState(() {
       _countdownDuration += durationToAdd;
     });
-
+    
     final blockerBox = Hive.box('blockerState');
     await blockerBox.put('blocker_end_time_millis', DateTime.now().add(_countdownDuration).millisecondsSinceEpoch);
     await blockerBox.put('total_block_duration_seconds', _countdownDuration.inSeconds);
 
-    if (mounted) {
+    if(mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('+15 minutes added!'), backgroundColor: Colors.green));
     }
@@ -237,13 +233,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       await blockerBox.put('quick_block_apps', _quickBlockApps.toList());
     }
   }
-
+  
   void _updateSelectedDuration(Duration d) {
     setState(() {
       _selectedDuration = d;
     });
   }
-
+  
   Future<void> _showCustomTimePicker() async {
     final selectedTime = await showDialog<TimeOfDay>(
       context: context,
@@ -262,7 +258,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<void> _startBlocking(BuildContext context) async {
     if (_isBlockingActive) return;
-
+    
     if (_selectedDuration.inSeconds <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a duration first.'), backgroundColor: Colors.orange),
@@ -284,30 +280,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       Future.delayed(const Duration(milliseconds: 500), _showAppSelectionPage);
       return;
     }
-
+    
     final blockerBox = Hive.box('blockerState');
-    await blockerBox.put('selected_blocked_apps', _quickBlockApps.toList());
+    await blockerBox.put('selected_blocked_apps', _quickBlockApps.toList()); 
     BlockerService.updateNativeBlocker();
-
+    
     setState(() {
-      _countdownDuration = _selectedDuration;
+      _countdownDuration = _selectedDuration; 
       _isBlockingActive = true;
-      _activeFocusMode = _selectedQuickMode;
-      _selectedDuration = Duration.zero;
+      _activeFocusMode = _selectedQuickMode; 
+      _selectedDuration = Duration.zero; 
     });
 
     await blockerBox.put('is_blocking_active', true);
     await blockerBox.put('blocker_end_time_millis', DateTime.now().add(_countdownDuration).millisecondsSinceEpoch);
     await blockerBox.put('total_block_duration_seconds', _countdownDuration.inSeconds);
-    await blockerBox.put('focus_mode', _activeFocusMode);
+    await blockerBox.put('focus_mode', _activeFocusMode); 
 
     _startCountdownTimer();
+    
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Focus activated!'), backgroundColor: Colors.green));
     }
   }
-
+  
   void _stopBlocking({BuildContext? context}) {
     if (!_isBlockingActive) return;
     _countdownTimer?.cancel();
@@ -315,12 +312,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     setState(() {
       _countdownDuration = Duration.zero;
       _isBlockingActive = false;
-      _activeFocusMode = 0;
+      _activeFocusMode = 0; 
     });
     final blockerBox = Hive.box('blockerState');
     blockerBox.delete('is_blocking_active');
     blockerBox.delete('blocker_end_time_millis');
-    blockerBox.delete('focus_mode');
+    blockerBox.delete('focus_mode'); 
+    
     if (context != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Blocker deactivated.'), backgroundColor: Colors.red));
@@ -329,11 +327,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   void _startCountdownTimer() {
     if (_countdownDuration.inDays > 900) return;
-
+    
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (!mounted) { timer.cancel(); return; }
       if (_countdownDuration.inSeconds <= 0) {
-        _stopBlocking();
+        _stopBlocking(); 
       } else {
         setState(() {
           _countdownDuration = _countdownDuration - const Duration(seconds: 1);
@@ -346,19 +344,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final blockerBox = Hive.box('blockerState');
     final savedIsBlockingActive = blockerBox.get('is_blocking_active') ?? false;
     final savedEndTimeMillis = blockerBox.get('blocker_end_time_millis');
-
+    
     if (savedIsBlockingActive && savedEndTimeMillis != null) {
       final savedEndTime = DateTime.fromMillisecondsSinceEpoch(savedEndTimeMillis);
       final remainingDuration = savedEndTime.difference(DateTime.now());
       if (remainingDuration.isNegative) {
-        _stopBlocking();
+        _stopBlocking(); 
       } else {
         setState(() {
           _countdownDuration = remainingDuration;
           _isBlockingActive = true;
-          _activeFocusMode = blockerBox.get('focus_mode') ?? 0;
+          _activeFocusMode = blockerBox.get('focus_mode') ?? 0; 
         });
-
+        
         if (_countdownDuration.inDays < 900) {
           _startCountdownTimer();
         }
@@ -388,9 +386,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContextCtxt) { 
     final durationToDisplay = _isBlockingActive ? _countdownDuration : _selectedDuration;
-
+    
     String formattedCountdown;
     final days = durationToDisplay.inDays;
     final hours = durationToDisplay.inHours.remainder(24);
@@ -398,19 +396,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final seconds = durationToDisplay.inSeconds.remainder(60);
 
     if (days > 900) {
-      formattedCountdown = "DEEP FOCUS";
+      formattedCountdown = "DEEP FOCUS"; 
     } else if (days > 0) {
-      formattedCountdown = "${days}d ${hours.toString().padLeft(2, '0')}h";
+      formattedCountdown = "${days}d ${hours.toString().padLeft(2, '0')}h"; 
     } else if (hours > 0) {
-      formattedCountdown = "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+      formattedCountdown = "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}"; 
     } else {
-      formattedCountdown = "00:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+      formattedCountdown = "00:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}"; 
     }
-
+    
     if (_isBlockingActive && _countdownDuration.inDays > 900) {
       formattedCountdown = "DEEP FOCUS";
     }
-
+    
 
     return Container(
       decoration: const BoxDecoration(
@@ -454,99 +452,109 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  _buildTimerDisplay(formattedCountdown),
-
+                  // --- FIX: Timer card yahan se HATA diya ---
+                  
                   Expanded(
                     child: _isBlockingActive
-                        ? _buildBlockingActiveView()
+                        // --- FIX: Argument yahan pass kiya ---
+                        ? Builder(builder: (context) => _buildBlockingActiveView(context, formattedCountdown)) 
                         : TabBarView(
                             controller: _tabController,
+                            // --- FIX: Slide physics change kiya ---
+                            physics: const BouncingScrollPhysics(), 
                             children: [
-                              _buildQuickFocusView(),
-                              _buildDeepFocusView(),
+                              // --- FIX: Argument yahan pass kiya ---
+                              Builder(builder: (context) => _buildQuickFocusView(context, formattedCountdown)), 
+                              Builder(builder: (context) => _buildDeepFocusView(context)), 
                             ],
                           ),
                   ),
+                  
+                  if (_isBannerAdLoaded && _bannerAd != null)
+                    Container(
+                      color: Colors.black,
+                      width: _bannerAd!.size.width.toDouble(),
+                      height: _bannerAd!.size.height.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
                 ],
               ),
-        bottomNavigationBar: (_isBannerAdLoaded && _bannerAd != null)
-          ? Container(
-              color: Colors.black,
-              width: _bannerAd!.size.width.toDouble(),
-              height: _bannerAd!.size.height.toDouble(),
-              child: AdWidget(ad: _bannerAd!),
-            )
-          : null,
       ),
     );
   }
 
-  Widget _buildQuickFocusView() {
-    return Builder(builder: (context) { // Use Builder to get context under Scaffold
-      return SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: MediaQuery.of(context).size.height -
-                (Scaffold.of(context).appBarMaxHeight ?? 0) -
-                (MediaQuery.of(context).padding.top +
-                    MediaQuery.of(context).padding.bottom) -
-                200 -
-                (_isBannerAdLoaded ? 50 : 0),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  _buildSectionHeader('1. Select Duration', _quickFocusColor),
-                  _buildTimePresetButtons(),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('2. Select Apps', _quickFocusColor),
-                  _buildAppSelectorCard(_quickFocusColor),
-                ],
-              ),
-              Column(
-                children: [
-                  _buildSectionHeader('3. Select Mode', _quickFocusColor),
-                  _buildModeSelector(),
-                  const SizedBox(height: 24),
-                  _buildStartButton(),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ],
-          ),
+  // --- NAYA LAYOUT ---
+  Widget _buildQuickFocusView(BuildContext context, String formattedCountdown) {
+    // --- FIX: Ab SingleChildScrollView use kar rahe hain ---
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height - 
+                     (Scaffold.of(context).appBarMaxHeight ?? 0) - 
+                     (MediaQuery.of(context).padding.top + MediaQuery.of(context).padding.bottom) - 
+                     (_isBannerAdLoaded ? 50 : 0) - 
+                     100, // Extra buffer
         ),
-      );
-    });
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- FIX: Timer card yahan ADD kiya ---
+                _buildTimerDisplay(context, formattedCountdown, key: const ValueKey('quick_timer')),
+                
+                const SizedBox(height: 20),
+                _buildSectionHeader('1. Select Duration', _quickFocusColor),
+                _buildTimePresetButtons(), 
+                
+                const SizedBox(height: 24),
+                
+                _buildSectionHeader('2. Select Apps', _quickFocusColor),
+                _buildAppSelectorCard(_quickFocusColor), 
+              ],
+            ),
+            
+            Column(
+              children: [
+                const SizedBox(height: 24), // Extra space
+                _buildSectionHeader('3. Select Mode', _quickFocusColor),
+                _buildModeSelector(), 
+                const SizedBox(height: 24),
+                _buildStartButton(context), 
+                const SizedBox(height: 16),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
-
+  
   Widget _buildModeSelector() {
     return Row(
       children: [
         _buildModeOption(
-          'Normal',
-          Icons.lock_open_rounded,
-          _normalColor,
-          _selectedQuickMode == 0,
+          'Normal', 
+          Icons.lock_open_rounded, 
+          _normalColor, 
+          _selectedQuickMode == 0, 
           () => setState(() => _selectedQuickMode = 0),
         ),
         const SizedBox(width: 16),
         _buildModeOption(
-          'Strict',
-          Icons.lock_rounded,
-          _strictColor,
-          _selectedQuickMode == 1,
+          'Strict', 
+          Icons.lock_rounded, 
+          _strictColor, 
+          _selectedQuickMode == 1, 
           () => setState(() => _selectedQuickMode = 1),
         ),
       ],
     );
   }
-
+  
   Widget _buildModeOption(String title, IconData icon, Color color, bool isSelected, VoidCallback onTap) {
     return Expanded(
       child: GestureDetector(
@@ -583,7 +591,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
 
-  Widget _buildDeepFocusView() {
+  Widget _buildDeepFocusView(BuildContext context) {
      return Padding(
        padding: const EdgeInsets.all(20),
        child: Column(
@@ -591,113 +599,175 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
          children: [
           const SizedBox(height: 20),
            _buildSectionHeader('1. Select Apps', _deepFocusColor),
-           _buildAppSelectorCard(_deepFocusColor),
-
-           const Spacer(),
-
-           _buildSectionHeader('2. Start Unlimited Session', _deepFocusColor),
-
-           Builder(builder: (context){ // Use Builder to get context for _startBlocking
-             return GestureDetector(
-               onTap: () {
-                 setState(() {
-                   _selectedQuickMode = 1;
-                   _selectedDuration = _unlimitedDuration;
-                 });
-                 _startBlocking(context);
-               },
-               child: ClipRRect(
-                 borderRadius: BorderRadius.circular(24),
-                 child: BackdropFilter(
-                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                   child: Container(
-                     width: double.infinity,
-                     height: 180,
-                     decoration: BoxDecoration(
-                       gradient: LinearGradient(
-                         colors: [_deepFocusColor.withOpacity(0.4), _deepFocusColor.withOpacity(0.2)],
-                         begin: Alignment.topLeft,
-                         end: Alignment.bottomRight,
-                       ),
-                       borderRadius: BorderRadius.circular(24),
-                       border: Border.all(color: _deepFocusColor, width: 2),
-                     ),
-                     child: Column(
-                       mainAxisAlignment: MainAxisAlignment.center,
-                       children: [
-                         Icon(Icons.all_inclusive_rounded, color: Colors.white, size: 72),
-                         const SizedBox(height: 12),
-                         Text(
-                           'Start Deep Focus',
-                           style: GoogleFonts.poppins(
-                             color: Colors.white,
-                             fontSize: 20,
-                             fontWeight: FontWeight.w600,
-                           ),
-                         ),
-                         Text(
-                           '(Strict Mode: Watch Ad to Stop)',
-                           style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
-                         ),
-                       ],
-                     ),
-                   ),
-                 ),
+           _buildAppSelectorCard(_deepFocusColor), 
+           
+           const Spacer(), 
+           
+           Center(
+             child: Icon(
+              Icons.all_inclusive_rounded, 
+              color: _deepFocusColor.withOpacity(0.4), 
+              size: 140
+            ),
+           ),
+           
+           const SizedBox(height: 16),
+           
+           Center(
+             child: Text(
+               'Deep Focus (Unlimited)',
+               style: GoogleFonts.poppins(
+                 color: Colors.white,
+                 fontSize: 22,
+                 fontWeight: FontWeight.w600,
                ),
-             );
-           }),
-           const Spacer(),
+             ),
+           ),
+           Center(
+             child: Text(
+               'Blocks selected apps until you stop manually.',
+               style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
+             ),
+           ),
+           
+           const Spacer(), 
+           
+           GestureDetector(
+             onTap: () {
+               setState(() {
+                 _selectedQuickMode = 1; 
+                 _selectedDuration = _unlimitedDuration; 
+               });
+               _startBlocking(context);
+             },
+             child: Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: _deepFocusColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _deepFocusColor.withOpacity(0.5),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.all_inclusive_rounded, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Start Unlimited Session',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+           ),
+           const SizedBox(height: 16),
          ],
        ),
      );
   }
 
 
-  Widget _buildBlockingActiveView() {
+  Widget _buildBlockingActiveView(BuildContext context, String formattedCountdown) {
     bool isDeepFocus = _countdownDuration.inDays > 900;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Column(
+        children: [
+          // --- FIX: Active timer yahan bhi dikhega ---
+          _buildTimerDisplay(context, formattedCountdown, key: const ValueKey('active_timer')),
+          const Spacer(),
+          
+          if (!isDeepFocus) ...[
+            _buildRewardButton(context), 
+            const SizedBox(height: 16),
+          ],
+          
+          if (_activeFocusMode == 0) 
+            _buildStopButton(context)
+          else 
+            _buildStopWithAdButton(context),
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Spacer(),
-
-        if (!isDeepFocus) ...[
-          _buildRewardButton(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
         ],
-
-        if (_activeFocusMode == 0)
-          _buildStopButton()
-        else
-          _buildStopWithAdButton(),
-
-        const SizedBox(height: 24),
-      ],
+      ),
+    );
+  }
+  
+  Widget _buildStopWithAdButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0.0), // Full width
+      child: GestureDetector(
+        onTap: () => _showAdToStop(context),
+        child: Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.amber.withOpacity(0.2), 
+            border: Border.all(color: Colors.amber),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Stop (Watch Ad)',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildStopWithAdButton() {
+  Widget _buildRewardButton(BuildContext context) {
+    bool canShowAd = _isRewardedAdLoaded; 
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Builder(builder: (context) { // Use Builder to get context for _showAdToStop
-        return GestureDetector(
-          onTap: () => _showAdToStop(context),
+      padding: const EdgeInsets.symmetric(horizontal: 0.0), // Full width
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: canShowAd ? 1.0 : 0.5,
+        child: GestureDetector(
+          onTap: canShowAd ? () => _showRewardAdForTime(context) : null,
           child: Container(
             width: double.infinity,
             height: 50,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              color: Colors.amber.withOpacity(0.2),
-              border: Border.all(color: Colors.amber),
+              color: Colors.green.withOpacity(0.2), 
+              border: Border.all(color: Colors.green),
             ),
             child: Center(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.lock_rounded, color: Colors.white, size: 20),
+                  const Icon(Icons.slow_motion_video_rounded, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Stop (Watch Ad)',
+                    'Watch Ad to Add 15 Min',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 16,
@@ -708,63 +778,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
             ),
           ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildRewardButton() {
-    bool canShowAd = _isRewardedAdLoaded;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
-        opacity: canShowAd ? 1.0 : 0.5,
-        child: Builder(builder: (context) { // Use Builder to get context for _showRewardAdForTime
-          return GestureDetector(
-            onTap: canShowAd ? () => _showRewardAdForTime(context) : null,
-            child: Container(
-              width: double.infinity,
-              height: 50,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: Colors.green.withOpacity(0.2),
-                border: Border.all(color: Colors.green),
-              ),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.slow_motion_video_rounded,
-                        color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Watch Ad to Add 15 Min',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
+        ),
       ),
     );
   }
 
-  Widget _buildTimerDisplay(String formattedCountdown) {
+  Widget _buildTimerDisplay(BuildContext context, String formattedCountdown, {Key? key}) {
     bool isDeepFocus = _isBlockingActive && _countdownDuration.inDays > 900;
     bool isTimerSet = _selectedDuration > Duration.zero;
-
+    
     // --- ACTIVE STATE ---
     if (_isBlockingActive) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        key: key, 
+        padding: const EdgeInsets.fromLTRB(0, 20, 0, 10), // Horizontal padding 0
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: BackdropFilter(
@@ -799,10 +826,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
       );
     }
-
+    
     // --- INACTIVE STATE ---
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      key: key, 
+      padding: const EdgeInsets.fromLTRB(0, 20, 0, 10), // Horizontal padding 0
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
@@ -818,16 +846,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             child: Column(
               children: [
                  Text(
-                  isTimerSet ? 'SESSION PREPARED' : 'SELECT DURATION',
+                  isTimerSet ? 'SESSION PREPARED' : 'SELECT DURATION', 
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: isTimerSet ? _quickFocusColor : Colors.white70,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12, 
+                    color: isTimerSet ? _quickFocusColor : Colors.white70, 
+                    fontWeight: FontWeight.w600, 
                     letterSpacing: 2
                   ),
                 ),
                 Text(
-                  isTimerSet ? formattedCountdown : "00:00:00",
+                  isTimerSet ? formattedCountdown : "00:00:00", 
                   textAlign: TextAlign.center,
                   style: GoogleFonts.robotoMono(
                     fontSize: 56,
@@ -878,9 +906,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     ];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 0.0),
+      padding: const EdgeInsets.symmetric(vertical: 0.0), 
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, 
         children: [
           ...presets.map((preset) {
             final isSelected = _selectedDuration == preset['duration'];
@@ -888,14 +916,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               preset['label'] as String,
               isSelected,
               () => _updateSelectedDuration(preset['duration'] as Duration),
-              _quickFocusColor,
+              _quickFocusColor, 
             );
           }),
           _buildTimeChip(
             'Custom',
-            false,
+            false, 
             _showCustomTimePicker,
-            _quickFocusColor,
+            _quickFocusColor, 
             icon: Icons.edit,
           ),
         ],
@@ -908,14 +936,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), 
         decoration: BoxDecoration(
-          color: isSelected ? accentColor.withOpacity(0.3) : const Color(0xFF1A1C2A),
+          color: isSelected ? accentColor.withOpacity(0.3) : const Color(0xFF1A1C2A), 
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? accentColor : accentColor.withOpacity(0.5),
             width: isSelected ? 2 : 1,
-          )
+          ) 
         ),
         child: Row(
           children: [
@@ -961,7 +989,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Apps to Block',
+                          'Apps to Block', 
                           style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                         Text(
@@ -980,100 +1008,96 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
     );
   }
-
-  Widget _buildStartButton() {
+  
+  Widget _buildStartButton(BuildContext context) {
     final Color buttonColor = _selectedQuickMode == 0 ? _normalColor : _strictColor;
-
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0.0),
-      child: Builder(builder: (context) { // Use Builder to get context for _startBlocking
-        return GestureDetector(
-          onTap: () => _startBlocking(context),
-          child: Container(
-            width: double.infinity,
-            height: 50,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: [buttonColor, buttonColor.withOpacity(0.7)],
-                begin: Alignment.centerLeft,
-                end: Alignment.bottomRight,
+      padding: const EdgeInsets.symmetric(horizontal: 0.0), 
+      child: GestureDetector(
+        onTap: () => _startBlocking(context),
+        child: Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              colors: [buttonColor, buttonColor.withOpacity(0.7)],
+              begin: Alignment.centerLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: buttonColor.withOpacity(0.5),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: buttonColor.withOpacity(0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+            ],
+          ),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Start Focus (${_selectedQuickMode == 0 ? "Normal" : "Strict"})',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Start Focus (${_selectedQuickMode == 0 ? "Normal" : "Strict"})',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
-
-  Widget _buildStopButton() {
+  
+  Widget _buildStopButton(BuildContext context) {
      return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Builder(builder: (context) { // Use Builder to get context for _stopBlocking
-        return GestureDetector(
-          onTap: () => _stopBlocking(context: context),
-          child: Container(
-            width: double.infinity,
-            height: 50,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                colors: [Colors.redAccent, Colors.red],
-                begin: Alignment.centerLeft,
-                end: Alignment.bottomRight,
+      child: GestureDetector(
+        onTap: () => _stopBlocking(context: context),
+        child: Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Colors.redAccent, Colors.red],
+              begin: Alignment.centerLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withOpacity(0.5),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.red.withOpacity(0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+            ],
+          ),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.stop_circle_outlined, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Stop Focus',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.stop_circle_outlined, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Stop Focus',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
 }
