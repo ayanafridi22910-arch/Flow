@@ -286,10 +286,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     BlockerService.updateNativeBlocker();
     
     setState(() {
-      _countdownDuration = _selectedDuration; 
+      setState(() {
+      _countdownDuration = _selectedDuration;
       _isBlockingActive = true;
-      _activeFocusMode = _selectedQuickMode; 
-      _selectedDuration = Duration.zero; 
+      _activeFocusMode = _selectedQuickMode;
+      _selectedDuration = Duration.zero;
+    });
+
+    // Enter immersive mode
     });
 
     await blockerBox.put('is_blocking_active', true);

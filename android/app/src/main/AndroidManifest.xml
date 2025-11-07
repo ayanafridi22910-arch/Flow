@@ -58,6 +58,11 @@
         </service>
 
         <service
+            android:name=".services.OverlayService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="mediaPlayback" />
 

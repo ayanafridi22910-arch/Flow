@@ -4,14 +4,12 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Notification
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import com.example.flow.BlockActivity
-import com.example.flow.MainActivity
+import com.example.flow.R
 
 class MyAccessibilityService : AccessibilityService() {
 
@@ -52,32 +50,37 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        Log.d("MyAccessibilityService", "onAccessibilityEvent: ${event?.eventType}, pkg: ${event?.packageName}")
-        if (!isBlocking) {
-            // Log.d("MyAccessibilityService", "Not blocking.")
+        if (!isBlocking || event == null) {
             return
         }
 
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val packageName = event.packageName?.toString()
-            Log.d("MyAccessibilityService", "Window state changed for pkg: $packageName")
-
-            if (packageName != null && blockedApps.contains(packageName)) {
-                Log.d("MyAccessibilityService", "Blocking app: $packageName")
-                // Prevent blocking the launcher and the app itself
-                if (isAppLauncher(packageName) || packageName == "com.example.flow") {
-                    Log.d("MyAccessibilityService", "Not blocking launcher or self.")
-                    return
-                }
-
-                performGlobalAction(GLOBAL_ACTION_BACK)
-
-                val intent = Intent(this, BlockActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                intent.putExtra("blocked_app_package", packageName)
-                startActivity(intent)
-                Log.d("MyAccessibilityService", "Started BlockActivity for $packageName")
+        val packageName = when (event.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> event.packageName?.toString()
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                // For some apps, the package name is not directly available in the event
+                // but can be retrieved from the source node.
+                event.source?.packageName?.toString()
             }
+            else -> null
+        }
+
+        if (packageName != null) {
+            handleAppBlock(packageName)
+        }
+    }
+
+    private fun handleAppBlock(packageName: String) {
+        if (blockedApps.contains(packageName)) {
+            if (isAppLauncher(packageName) || packageName == "com.example.flow") {
+                return
+            }
+
+            performGlobalAction(GLOBAL_ACTION_HOME)
+
+            val intent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_SHOW_OVERLAY
+            }
+            startService(intent)
         }
     }
 
@@ -105,7 +108,7 @@ class MyAccessibilityService : AccessibilityService() {
         val notification = Notification.Builder(this, "channel_id")
             .setContentTitle("Flow App Blocker")
             .setContentText("Accessibility service is running.")
-            .setSmallIcon(com.example.flow.R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .build()
 
         startForeground(1, notification)
@@ -114,6 +117,14 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         isServiceEnabled = false
         Log.d("MyAccessibilityService", "Service disconnected")
+        hideOverlay()
         return super.onUnbind(intent)
+    }
+
+    private fun hideOverlay() {
+        val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_HIDE_OVERLAY
+        }
+        startService(intent)
     }
 }

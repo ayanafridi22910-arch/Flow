@@ -47,6 +47,7 @@ dependencies {
 
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.0.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.gms:play-services-ads:23.0.0")
 }
 
 flutter {

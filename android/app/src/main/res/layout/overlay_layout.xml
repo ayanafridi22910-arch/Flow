@@ -2,32 +2,36 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#AA000000"> <TextView
-        android:id="@+id/appBlockedText"
+    android:background="#FF000000">
+
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
-        android:text="App Blocked by Flow" 
-        android:textColor="@android:color/white"
-        android:textSize="36sp"
-        android:textStyle="bold"
         android:gravity="center"
-        android:padding="20dp" />
+        android:orientation="vertical">
 
-    <Button
-        android:id="@+id/closeOverlayButton"
-        android:layout_width="wrap_content"
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="App Blocked"
+            android:textColor="@android:color/white"
+            android:textSize="32sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/close_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Close" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/ad_container"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/appBlockedText"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="50dp"
-        android:text="Go to Home Screen" 
-        android:textColor="@android:color/white"
-        android:backgroundTint="#FF6F0000" 
-        android:paddingLeft="30dp"
-        android:paddingRight="30dp"
-        android:paddingTop="15dp"
-        android:paddingBottom="15dp"
-        android:textSize="18sp"/>
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true" />
 
 </RelativeLayout>
