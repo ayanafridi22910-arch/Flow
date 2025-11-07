@@ -11,34 +11,30 @@ import android.os.IBinder
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.example.flow.R
-import com.google.android.gms.ads.AdLoader
+import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.nativead.NativeAd
-import com.google.android.gms.ads.nativead.NativeAdView
 
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
-    private var currentNativeAd: NativeAd? = null
 
     companion object {
         const val ACTION_SHOW_OVERLAY = "com.example.flow.ACTION_SHOW_OVERLAY"
         const val ACTION_HIDE_OVERLAY = "com.example.flow.ACTION_HIDE_OVERLAY"
         private const val NOTIFICATION_CHANNEL_ID = "FlowAppBlockerChannel"
         private const val NOTIFICATION_ID = 101
-        private const val NATIVE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110"
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        return null
+        return null // Not a bound service.
     }
 
     override fun onCreate() {
@@ -59,7 +55,7 @@ class OverlayService : Service() {
 
     private fun showOverlay() {
         if (overlayView != null) {
-            return
+            return // View is already showing
         }
 
         val inflater = getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
@@ -90,52 +86,37 @@ class OverlayService : Service() {
                 hideOverlay()
             }
 
-            loadNativeAd()
+            // Asynchronously load the ad
+            loadAdAsync()
 
         } catch (e: Exception) {
             // Log error
         }
     }
 
-    private fun loadNativeAd() {
-        val builder = AdLoader.Builder(this, NATIVE_AD_UNIT_ID)
-        builder.forNativeAd { nativeAd ->
-            currentNativeAd?.destroy()
-            currentNativeAd = nativeAd
-            val adContainer = overlayView?.findViewById<FrameLayout>(R.id.ad_container)
-            val adView = LayoutInflater.from(this@OverlayService).inflate(R.layout.native_ad_layout, null) as NativeAdView
-            populateNativeAdView(nativeAd, adView)
-            adContainer?.removeAllViews()
-            adContainer?.addView(adView)
+    private fun loadAdAsync() {
+        val adContainer = overlayView?.findViewById<FrameLayout>(R.id.ad_container) ?: return
+
+        val adView = AdView(this)
+        adView.adUnitId = "ca-app-pub-3940256099942544/6300978111"
+        adView.setAdSize(AdSize.BANNER)
+
+        adView.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                adContainer.removeAllViews()
+                adContainer.addView(adView)
+            }
+
+            override fun onAdFailedToLoad(adError: LoadAdError) {
+                // You can log the error here
+            }
         }
 
-        val adLoader = builder.build()
-        adLoader.loadAd(AdRequest.Builder().build())
-    }
-
-    private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
-        adView.headlineView = adView.findViewById(R.id.ad_headline)
-        adView.bodyView = adView.findViewById(R.id.ad_body)
-        adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
-        adView.iconView = adView.findViewById(R.id.ad_app_icon)
-
-        (adView.headlineView as TextView).text = nativeAd.headline
-        (adView.bodyView as TextView).text = nativeAd.body
-        (adView.callToActionView as Button).text = nativeAd.callToAction
-
-        val icon = nativeAd.icon
-        if (icon == null) {
-            adView.iconView?.visibility = View.GONE
-        } else {
-            (adView.iconView as ImageView).setImageDrawable(icon.drawable)
-            adView.iconView?.visibility = View.VISIBLE
-        }
-
-        adView.setNativeAd(nativeAd)
+        val adRequest = AdRequest.Builder().build()
+        adView.loadAd(adRequest)
     }
 
     private fun hideOverlay() {
-        currentNativeAd?.destroy()
         overlayView?.let {
             try {
                 windowManager.removeView(it)
@@ -148,7 +129,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        hideOverlay()
+        hideOverlay() // Clean up any existing overlay
     }
 
     private fun createNotificationChannel() {
