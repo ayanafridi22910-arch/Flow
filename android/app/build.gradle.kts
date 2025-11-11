@@ -3,6 +3,7 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("kotlin-kapt")
 }
 
 android {
@@ -16,12 +17,12 @@ android {
         isCoreLibraryDesugaringEnabled = true
         // ####################################################################
         
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "1.8"
     }
 
     defaultConfig {
@@ -48,8 +49,13 @@ dependencies {
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.0.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.gms:play-services-ads:23.0.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }
 
 flutter {
     source = "../.."
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class).all {
+    kotlinOptions.jvmTarget = "1.8"
 }

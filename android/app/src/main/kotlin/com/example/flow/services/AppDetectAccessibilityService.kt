@@ -1,12 +1,12 @@
 package com.example.flow.services
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
-import com.example.flow.BlockManager
-import com.example.flow.MainActivity
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.flow.BlockManager
 
 class AppDetectAccessibilityService : AccessibilityService() {
 
@@ -35,10 +35,17 @@ class AppDetectAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            if (packageName != currentForegroundPackage) {
-                currentForegroundPackage = packageName
-                handleAppChange(packageName)
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                if (packageName != currentForegroundPackage) {
+                    currentForegroundPackage = packageName
+                    handleAppChange(packageName)
+                }
+            }
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                if (packageName == "com.instagram.android") {
+                    handleInstagramClick(event)
+                }
             }
         }
     }
@@ -65,6 +72,37 @@ class AppDetectAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun handleInstagramClick(event: AccessibilityEvent) {
+        // First, check if Reels blocking is enabled.
+        // We'll get this preference from the BlockManager.
+        if (!BlockManager.isInstagramReelsBlocked()) {
+            return
+        }
+
+        var nodeInfo: AccessibilityNodeInfo? = event.source
+        while (nodeInfo != null) {
+            // The Reels tab can be identified by its content description.
+            // We check for "Reels" case-insensitively.
+            if (nodeInfo.contentDescription?.toString().equals("Reels", ignoreCase = true)) {
+                Log.d("AccessibilityService", "Instagram Reels tab clicked. Blocking.")
+
+                // Show the overlay immediately.
+                val showOverlayIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_SHOW_OVERLAY
+                }
+                startService(showOverlayIntent)
+
+                // Perform the global action to go to the Home Screen, effectively
+                // closing the app from the user's perspective.
+                performGlobalAction(GLOBAL_ACTION_HOME)
+
+                break // Exit the loop once the Reels tab is found and handled.
+            }
+            nodeInfo = nodeInfo.parent
+        }
+    }
+
+
     override fun onInterrupt() {
         Log.d("AccessibilityService", "onInterrupt: Service interrupted.")
     }
@@ -73,6 +111,15 @@ class AppDetectAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         Log.d("AccessibilityService", "Service Connected.")
         BlockManager.initialize(this)
+
+        // We need to configure the service to listen for the events we care about.
+        serviceInfo = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_CLICKED
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            // We need FLAG_REPORT_VIEW_IDS to get the resource names of views.
+            // FLAG_INCLUDE_NOT_IMPORTANT_VIEWS is also helpful for broader detection.
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        }
     }
 
     override fun onDestroy() {

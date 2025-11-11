@@ -13,7 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.ComponentName
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.view.accessibility.AccessibilityManager
-import androidx.annotation.NonNull // Yeh import add karein
+import androidx.annotation.NonNull
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
@@ -25,10 +25,16 @@ class MainActivity: FlutterActivity() {
         private const val CHANNEL = "app.blocker/channel"
         private var channel: MethodChannel? = null
 
-        // Yeh function MyAccessibilityService se call hoga (agar URL tracking use kar rahe ho)
         fun sendUrlToFlutter(url: String) {
             Handler(Looper.getMainLooper()).post {
                 channel?.invokeMethod("onUrlVisited", url)
+            }
+        }
+
+        // Function for the accessibility service to send debug logs to Flutter
+        fun sendDebugLogToFlutter(log: String) {
+            Handler(Looper.getMainLooper()).post {
+                channel?.invokeMethod("onDebugLog", log)
             }
         }
     }
@@ -37,46 +43,34 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("channel_id", "Flow Blocker", NotificationManager.IMPORTANCE_LOW)
+            val notificationChannel = NotificationChannel("channel_id", "Flow Blocker", NotificationManager.IMPORTANCE_LOW)
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(notificationChannel)
         }
 
-        // BlockManager.initialize(this) // Is line ki zaroorat nahi hai
+        BlockManager.initialize(this)
 
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         
         channel?.setMethodCallHandler {
             call, result ->
             when (call.method) {
-                "checkAccessibilityServiceEnabled" -> {
-                    val isEnabled = isAccessibilityServiceEnabled(this)
-                    result.success(isEnabled)
-                }
-
-                "isOverlayPermissionGranted" -> {
-                    result.success(Settings.canDrawOverlays(this))
-                }
-
+                "checkAccessibilityServiceEnabled" -> result.success(isAccessibilityServiceEnabled(this))
+                "isOverlayPermissionGranted" -> result.success(Settings.canDrawOverlays(this))
                 "requestOverlayPermission" -> {
                     if (!Settings.canDrawOverlays(this)) {
-                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:$packageName"))
+                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                         startActivity(intent)
                     }
                     result.success(null)
                 }
-                
                 "openAccessibilitySettings" -> {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    startActivity(intent)
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     result.success(null)
                 }
-
                 "setBlockedApps" -> {
                     val apps = call.argument<List<String>>("apps")
                     if (apps != null) {
-                        // Yahan MyAccessibilityService ko call karna hai
                         MyAccessibilityService.updateBlockedApps(apps)
                         Log.d("MainActivity", "Updated MyAccessibilityService with apps: $apps")
                         result.success(true)
@@ -84,10 +78,17 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID_ARGUMENT", "App list cannot be null.", null)
                     }
                 }
-
-                else -> {
-                    result.notImplemented()
+                "isReelsBlocked" -> result.success(BlockManager.isInstagramReelsBlocked())
+                "setReelsBlocked" -> {
+                    val blocked = call.argument<Boolean>("blocked")
+                    if (blocked != null) {
+                        BlockManager.setInstagramReelsBlocked(blocked)
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Blocked status cannot be null.", null)
+                    }
                 }
+                else -> result.notImplemented()
             }
         }
     }
@@ -95,21 +96,11 @@ class MainActivity: FlutterActivity() {
     private fun isAccessibilityServiceEnabled(context: Context): Boolean {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        
-        // Yahan MyAccessibilityService ko check karna hai
-        val expectedComponentName = ComponentName(context, com.example.flow.services.MyAccessibilityService::class.java)
+        val expectedComponentName = ComponentName(context, MyAccessibilityService::class.java)
 
-        for (serviceInfo in enabledServices) {
-            val componentName = ComponentName(
-                serviceInfo.resolveInfo.serviceInfo.packageName,
-                serviceInfo.resolveInfo.serviceInfo.name
-            )
-            if (componentName == expectedComponentName) {
-                Log.d("AccessibilityCheck", "SUCCESS (Manager): Service is enabled and matches component name.")
-                return true
-            }
+        return enabledServices.any {
+            val componentName = ComponentName(it.resolveInfo.serviceInfo.packageName, it.resolveInfo.serviceInfo.name)
+            componentName == expectedComponentName
         }
-        Log.d("AccessibilityCheck", "FAILURE (Manager): Service is NOT enabled. Looking for ${expectedComponentName.flattenToString()}")
-        return false
     }
 }

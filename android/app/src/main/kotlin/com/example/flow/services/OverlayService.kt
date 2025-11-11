@@ -11,15 +11,9 @@ import android.os.IBinder
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
+import android.widget.Button
 import androidx.core.app.NotificationCompat
 import com.example.flow.R
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.MobileAds
 
 class OverlayService : Service() {
 
@@ -42,13 +36,13 @@ class OverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-        MobileAds.initialize(this) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_SHOW_OVERLAY -> showOverlay()
-            ACTION_HIDE_OVERLAY -> hideOverlay()
+        if (intent?.action == ACTION_SHOW_OVERLAY) {
+            showOverlay()
+        } else if (intent?.action == ACTION_HIDE_OVERLAY) {
+            hideOverlay()
         }
         return START_STICKY
     }
@@ -86,34 +80,16 @@ class OverlayService : Service() {
                 hideOverlay()
             }
 
-            // Asynchronously load the ad
-            loadAdAsync()
+            val whyBlockedButton: Button? = overlayView?.findViewById(R.id.why_blocked_button)
+            whyBlockedButton?.setOnClickListener {
+                // TODO: Implement logic to show why the app is blocked (e.g., show a dialog or navigate to a page)
+                // For now, just log a message
+                // Log.d("OverlayService", "Why Blocked button clicked!")
+            }
 
         } catch (e: Exception) {
             // Log error
         }
-    }
-
-    private fun loadAdAsync() {
-        val adContainer = overlayView?.findViewById<FrameLayout>(R.id.ad_container) ?: return
-
-        val adView = AdView(this)
-        adView.adUnitId = "ca-app-pub-3940256099942544/6300978111"
-        adView.setAdSize(AdSize.BANNER)
-
-        adView.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                adContainer.removeAllViews()
-                adContainer.addView(adView)
-            }
-
-            override fun onAdFailedToLoad(adError: LoadAdError) {
-                // You can log the error here
-            }
-        }
-
-        val adRequest = AdRequest.Builder().build()
-        adView.loadAd(adRequest)
     }
 
     private fun hideOverlay() {

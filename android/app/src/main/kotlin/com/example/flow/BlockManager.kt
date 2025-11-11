@@ -10,6 +10,7 @@ object BlockManager {
 
     private const val PREFS_NAME = "AppBlockerPrefs"
     private const val BLOCKED_APPS_KEY = "blockedApps"
+    private const val REELS_BLOCKED_KEY = "reelsBlocked"
 
     private lateinit var sharedPreferences: SharedPreferences
 
@@ -33,6 +34,19 @@ object BlockManager {
     fun isAppBlocked(packageName: String): Boolean {
         val isBlocked = getBlockedApps().contains(packageName)
         Log.d("BlockManager", "isAppBlocked: $packageName -> $isBlocked")
+        return isBlocked
+    }
+
+    // Saves the blocking state for Instagram Reels.
+    fun setInstagramReelsBlocked(blocked: Boolean) {
+        sharedPreferences.edit().putBoolean(REELS_BLOCKED_KEY, blocked).apply()
+        Log.d("BlockManager", "setInstagramReelsBlocked: $blocked")
+    }
+
+    // Checks if Instagram Reels blocking is enabled.
+    fun isInstagramReelsBlocked(): Boolean {
+        val isBlocked = sharedPreferences.getBoolean(REELS_BLOCKED_KEY, false)
+        Log.d("BlockManager", "isInstagramReelsBlocked -> $isBlocked")
         return isBlocked
     }
 }

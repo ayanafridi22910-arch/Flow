@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flow/screens/first_page.dart';
 import 'package:flow/screens/app_limits_page.dart';
 import 'package:flow/screens/settings_page.dart';
+import 'package:flow/screens/social_media_limits_page.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -12,10 +14,26 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  static const platform = MethodChannel('app.blocker/channel');
+
+  @override
+  void initState() {
+    super.initState();
+    platform.setMethodCallHandler(_handleNativeMethodCall);
+  }
+
+  Future<dynamic> _handleNativeMethodCall(MethodCall call) async {
+    if (call.method == 'onDebugLog') {
+      final String log = call.arguments;
+      // This will print the debug message from the native service to the Flutter console.
+      print('NATIVE_DEBUG: $log');
+    }
+  }
 
   static const List<Widget> _widgetOptions = <Widget>[
     FirstPage(),
     AppLimitsPage(),
+    SocialMediaLimitsPage(),
     SettingsPage(),
   ];
 
@@ -48,7 +66,8 @@ class _AppShellState extends State<AppShell> {
           children: [
             _buildNavItem(Icons.shield_moon, "Focus", 0),
             _buildNavItem(Icons.timer_outlined, "Limits", 1),
-            _buildNavItem(Icons.settings_outlined, "Settings", 2),
+            _buildNavItem(Icons.public_outlined, "Social", 2),
+            _buildNavItem(Icons.settings_outlined, "Settings", 3),
           ],
         ),
       ),
